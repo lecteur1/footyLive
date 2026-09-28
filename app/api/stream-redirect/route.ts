@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import logger from '@/lib/logger';
 
 const SECRET_KEY = process.env.STREAM_SECRET || 'default_stream_hmac_secret_key_123_abc';
 
@@ -11,20 +10,11 @@ export async function GET(request: NextRequest) {
   const sig = searchParams.get('sig');
 
   if (!u || !expires || !sig) {
-    logger.warn('Unauthorized access attempt: Missing credentials', {
-      ip: request.headers.get('x-forwarded-for') || 'unknown',
-      url: request.url
-    });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const expiresTimestamp = parseInt(expires, 10);
   if (isNaN(expiresTimestamp) || expiresTimestamp < Date.now()) {
-    logger.warn('Forbidden access attempt: Stream link expired', {
-      u,
-      expires,
-      ip: request.headers.get('x-forwarded-for') || 'unknown'
-    });
     return NextResponse.json({ error: 'Stream link has expired' }, { status: 403 });
   }
 
@@ -34,25 +24,61 @@ export async function GET(request: NextRequest) {
     .digest('hex');
 
   if (sig !== expectedSig) {
-    logger.warn('Forbidden access attempt: Signature mismatch', {
-      u,
-      expires,
-      sig,
-      expectedSig,
-      ip: request.headers.get('x-forwarded-for') || 'unknown'
-    });
     return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
   }
 
   try {
     const decoded = Buffer.from(u, 'base64url').toString('utf-8');
     if (!decoded.startsWith('http://') && !decoded.startsWith('https://')) {
-      logger.warn('Invalid redirect URL decoded', { decoded });
       return NextResponse.json({ error: 'Invalid URL scheme' }, { status: 400 });
     }
-    return NextResponse.redirect(decoded, 302);
+
+    // بدلاً من 302 Redirect، نعرض صفحة وسيطة نظيفة تلغي قيود الساندبوكس وتفتح البث مباشرة
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta name="referrer" content="no-referrer" />
+          <style>
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
+              height: 100%;
+              background-color: #000;
+              overflow: hidden;
+            }
+            iframe {
+              width: 100%;
+              height: 100%;
+              border: 0;
+            }
+          </style>
+        </head>
+        <body>
+          <iframe 
+            src="${decoded}" 
+            allowfullscreen="true" 
+            webkitallowfullscreen="true" 
+            mozallowfullscreen="true"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          ></iframe>
+        </body>
+      </html>
+    `;
+
+    return new NextResponse(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        // إزالة أي قيود أمنية تعترض تشغيل الفيديو
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+
   } catch (err: any) {
-    logger.error('Failed decoding redirect URL', err, { u });
     return NextResponse.json({ error: 'Invalid encoding' }, { status: 400 });
   }
 }
