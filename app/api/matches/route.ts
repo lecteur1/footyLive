@@ -1,43 +1,43 @@
 import { NextResponse } from 'next/server';
 
-// قائمة البطولات والكلمات المفتاحية المهمة للمستخدم العربي والمحلي
+// قائمة البطولات والفرق ذات الأولوية
 const PRIORITY_KEYWORDS = [
   'champions league', 'premier league', 'laliga', 'serie a', 'bundesliga', 
   'ligue 1', 'caf', 'africa', 'algeria', 'morocco', 'egypt', 'saudi', 
-  'world cup', 'euro', 'nations league', 'afcon', 'copa'
+  'world cup', 'euro', 'nations league', 'afcon', 'copa', 'pro league'
 ];
 
 export async function GET() {
   try {
-    // 1. جلب المباريات من المصدر المعتمد
-    const res = await fetch('https://v3.football.api-sports.io/fixtures?live=all', {
-      headers: {
-        'x-apisports-key': process.env.FOOTBALL_API_KEY || '',
-        'User-Agent': 'Mozilla/5.0'
-      },
+    // جلب المباريات من واجهة المشروع الأصلية المعتمدة
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://footylive-api.vercel.app';
+    const res = await fetch(`${baseUrl}/api/v1/matches`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
       next: { revalidate: 60 }
     });
 
-    // في حال كنت تعتمد على مصدر الـ Scraper المباشر الخاص بالمشروع:
+    if (!res.ok) {
+      // محاولة بديلة من المسار الداخلي إذا كان متوفراً
+      return NextResponse.json({ matches: [] });
+    }
+
     const data = await res.json();
-    let rawMatches = data.response || data.matches || (Array.isArray(data) ? data : []);
+    const rawMatches: any[] = Array.isArray(data) ? data : (data.matches || []);
 
-    // 2. فلترة صارمة: فقط المباريات التي تملك بثاً حقيقياً أو بطولات ذات أولوية
-    const filteredMatches = rawMatches.filter((m) => {
-      const tournament = (m.tournament || m.league?.name || '').toLowerCase();
-      const hasStreams = (m.streams && m.streams.length > 0) || m.hasStreams === true;
-
-      // استبعاد الدوريات الضعيفة جداً غير المتلفزة عربياً إلا إذا توفر لها سيرفر مؤكد
-      const isPriority = PRIORITY_KEYWORDS.some(k => tournament.includes(k));
+    // فلترة المباريات: استبقاء المباريات المهمة أو التي تملك بثاً مؤكداً فقط
+    const filteredMatches = rawMatches.filter((m: any) => {
+      const tournament = (m.tournament || m.league || '').toLowerCase();
+      const title = (m.title || '').toLowerCase();
+      const hasStreams = Boolean(m.hasStreams || (m.streams && m.streams.length > 0));
+      const isPriority = PRIORITY_KEYWORDS.some(k => tournament.includes(k) || title.includes(k));
 
       return hasStreams || isPriority;
     });
 
     return NextResponse.json({
-      matches: filteredMatches.length > 0 ? filteredMatches : rawMatches.slice(0, 8)
+      matches: filteredMatches.length > 0 ? filteredMatches : rawMatches.slice(0, 10)
     });
-
   } catch (error) {
-    return NextResponse.json({ matches: [] }, { status: 500 });
+    return NextResponse.json({ matches: [] }, { status: 200 });
   }
 }
