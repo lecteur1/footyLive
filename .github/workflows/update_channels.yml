@@ -1,12 +1,12 @@
-
 name: Update Arabic Sports Channels
 
 on:
   schedule:
-    # يعمل تلقائياً كل ساعتين
     - cron: '0 */2 * * *'
-  # يتيح لك تشغيله يدوياً في أي وقت بضغطة زر من صفحة Actions
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   scrape-channels:
@@ -21,18 +21,21 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies & iptv-scraper
+      - name: Clone and Setup Scraper
         run: |
-          pip install git+https://github.com/MohamedAmineGrami/iptv-scraper.git
-          pip install beautifulsoup4 requests
+          git clone https://github.com/MohamedAmineGrami/iptv-scraper.git scraper_core
+          cd scraper_core
+          pip install -r requirements.txt || true
+          pip install beautifulsoup4 requests termcolor colorama art
 
-      - name: Run Scraper for beIN Sports
+      - name: Run Scraper
         run: |
           mkdir -p temp_output
-          # سحب قنوات bein sports النشطة
-          iptv-scraper -c "bein sports" -n 8 -o "temp_output/bein" --auto-save || true
+          cd scraper_core
+          # تشغيل سكربت السحب لقنوات bein
+          python -m iptv_scraper -c "bein sports" -n 8 -o "../temp_output/bein" --auto-save || python main.py -c "bein sports" -n 8 -o "../temp_output/bein" --auto-save || true
 
-      - name: Convert M3U to App JSON
+      - name: Convert to JSON
         run: |
           python - << 'EOF'
           import os
@@ -40,40 +43,38 @@ jobs:
           import glob
 
           channels = []
-          # البحث عن أحدث ملف m3u تم إنشاؤه
-          files = glob.glob('temp_output/**/*.m3u', recursive=True) + glob.glob('*.m3u') + glob.glob('temp_output/*.m3u')
+          files = glob.glob('temp_output/**/*.m3u', recursive=True) + glob.glob('**/*.m3u', recursive=True)
 
-          if files:
-              latest_file = max(files, key=os.path.getmtime)
-              with open(latest_file, 'r', encoding='utf-8', errors='ignore') as f:
-                  current_name = None
-                  for line in f:
-                      line = line.strip()
-                      if line.startswith('#EXTINF:'):
-                          parts = line.split(',')
-                          current_name = parts[-1].strip() if len(parts) > 1 else "beIN Sport"
-                      elif line.startswith('http'):
-                          channels.append({
-                              "name": current_name or "beIN Sport",
-                              "url": line,
-                              "quality": "HD"
-                          })
-                          current_name = None
+          for fpath in files:
+              try:
+                  with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
+                      current_name = None
+                      for line in f:
+                          line = line.strip()
+                          if line.startswith('#EXTINF:'):
+                              parts = line.split(',')
+                              current_name = parts[-1].strip() if len(parts) > 1 else "beIN Sports"
+                          elif line.startswith('http'):
+                              channels.append({
+                                  "name": current_name or "beIN Sports",
+                                  "url": line,
+                                  "quality": "HD"
+                              })
+                              current_name = None
+              except Exception:
+                  pass
 
-          # التأكد من وجود مجلد public
           os.makedirs('public', exist_ok=True)
-          
-          # حفظ البيانات في public/arabic_channels.json
           with open('public/arabic_channels.json', 'w', encoding='utf-8') as out:
               json.dump(channels, out, ensure_ascii=False, indent=2)
 
-          print(f"Successfully generated {len(channels)} channels.")
+          print(f"Generated {len(channels)} channels.")
           EOF
 
-      - name: Commit and Push Changes
+      - name: Commit and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add public/arabic_channels.json
-          git commit -m "Auto-update beIN sports stream links [skip ci]" || echo "No changes to commit"
+          git commit -m "Auto-update beIN sports channels [skip ci]" || echo "No changes"
           git push
