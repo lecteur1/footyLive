@@ -21,54 +21,59 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Clone and Setup Scraper
-        run: |
-          git clone https://github.com/MohamedAmineGrami/iptv-scraper.git scraper_core
-          cd scraper_core
-          pip install -r requirements.txt || true
-          pip install beautifulsoup4 requests termcolor colorama art
-
-      - name: Run Scraper
-        run: |
-          mkdir -p temp_output
-          cd scraper_core
-          # تشغيل سكربت السحب لقنوات bein
-          python -m iptv_scraper -c "bein sports" -n 8 -o "../temp_output/bein" --auto-save || python main.py -c "bein sports" -n 8 -o "../temp_output/bein" --auto-save || true
-
-      - name: Convert to JSON
+      - name: Fetch Channels Directly
         run: |
           python - << 'EOF'
-          import os
+          import urllib.request
           import json
-          import glob
+          import re
+          import os
+
+          headers = {'User-Agent': 'Mozilla/5.0'}
+          sources = [
+              "https://raw.githubusercontent.com/iptv-org/iptv/master/streams/ara.m3u",
+              "https://raw.githubusercontent.com/Free-IPTV/Countries/master/Arab_World.m3u"
+          ]
 
           channels = []
-          files = glob.glob('temp_output/**/*.m3u', recursive=True) + glob.glob('**/*.m3u', recursive=True)
+          seen = set()
 
-          for fpath in files:
+          for src in sources:
               try:
-                  with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
-                      current_name = None
-                      for line in f:
+                  req = urllib.request.Request(src, headers=headers)
+                  with urllib.request.urlopen(req, timeout=15) as res:
+                      lines = res.read().decode('utf-8', errors='ignore').split('\n')
+                      name = None
+                      for line in lines:
                           line = line.strip()
                           if line.startswith('#EXTINF:'):
-                              parts = line.split(',')
-                              current_name = parts[-1].strip() if len(parts) > 1 else "beIN Sports"
+                              m = re.search(r',(.+)$', line)
+                              if m:
+                                  name = m.group(1).strip()
                           elif line.startswith('http'):
-                              channels.append({
-                                  "name": current_name or "beIN Sports",
-                                  "url": line,
-                                  "quality": "HD"
-                              })
-                              current_name = None
-              except Exception:
-                  pass
+                              if name and any(k in name.lower() for k in ['sport', 'bein', 'alkass', 'ssc', 'on time']):
+                                  if line not in seen:
+                                      seen.add(line)
+                                      channels.append({
+                                          "name": name,
+                                          "url": line,
+                                          "quality": "HD"
+                                      })
+                              name = None
+              except Exception as e:
+                  print(f"Skipping {src}: {e}")
+
+          if not channels:
+              channels = [
+                  {"name": "beIN Sports News HD", "url": "https://www.youtube.com/embed/live_stream?channel=UCyG_8rD5m7aN2_zI38XfEgw", "quality": "FHD"},
+                  {"name": "Alkass One HD", "url": "https://www.alkass.net/alkass/live.aspx?ch=one", "quality": "HD"}
+              ]
 
           os.makedirs('public', exist_ok=True)
-          with open('public/arabic_channels.json', 'w', encoding='utf-8') as out:
-              json.dump(channels, out, ensure_ascii=False, indent=2)
+          with open('public/arabic_channels.json', 'w', encoding='utf-8') as f:
+              json.dump(channels, f, ensure_ascii=False, indent=2)
 
-          print(f"Generated {len(channels)} channels.")
+          print(f"Saved {len(channels)} channels to public/arabic_channels.json")
           EOF
 
       - name: Commit and Push
@@ -76,5 +81,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add public/arabic_channels.json
-          git commit -m "Auto-update beIN sports channels [skip ci]" || echo "No changes"
+          git commit -m "Auto-update arabic channels links [skip ci]" || echo "No changes"
           git push
