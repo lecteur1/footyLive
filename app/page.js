@@ -3,11 +3,8 @@
 import { useState, useEffect } from 'react';
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('matches');
   const [matches, setMatches] = useState([]);
-  const [arabicChannels, setArabicChannels] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
-  const [loadingChannels, setLoadingChannels] = useState(false);
   const [streams, setStreams] = useState([]);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [loadingStreams, setLoadingStreams] = useState(false);
@@ -16,7 +13,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchMatches();
-    fetchArabicChannels();
   }, []);
 
   const fetchMatches = async () => {
@@ -30,21 +26,6 @@ export default function Home() {
       console.error(e);
     } finally {
       setLoadingMatches(false);
-    }
-  };
-
-  const fetchArabicChannels = async () => {
-    setLoadingChannels(true);
-    try {
-      const res = await fetch('/arabic_channels.json');
-      if (res.ok) {
-        const data = await res.json();
-        setArabicChannels(Array.isArray(data) ? data : []);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingChannels(false);
     }
   };
 
@@ -88,7 +69,7 @@ export default function Home() {
       {/* شريط الراية الوطنية */}
       <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #00853f 33.3%, #ffffff 33.3%, #ffffff 66.6%, #d21034 66.6%)' }}></div>
 
-      {/* شريط التطبيق العلوي */}
+      {/* الشريط العلوي */}
       <header style={{
         background: '#111a14',
         borderBottom: '1px solid #1d3324',
@@ -103,194 +84,105 @@ export default function Home() {
           <span style={{ fontSize: '1.6rem' }}>🇩🇿</span>
           <div>
             <h1 style={{ fontSize: '1.2rem', fontWeight: '900', color: '#fff', margin: 0 }}>الخضرة لايف</h1>
-            <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 'bold' }}>DZ FOOTBALL & TV</span>
+            <span style={{ fontSize: '0.65rem', color: '#10b981', fontWeight: 'bold' }}>DZ LIVE FOOTBALL</span>
           </div>
         </div>
         <button
-          onClick={() => { fetchMatches(); fetchArabicChannels(); }}
+          onClick={fetchMatches}
           style={{ background: '#00853f', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 'bold', cursor: 'pointer' }}
         >
           تحديث ⟳
         </button>
       </header>
 
-      {/* أزرار التبديل */}
-      <div style={{ display: 'flex', gap: '10px', padding: '14px 16px 8px', width: '100%', boxSizing: 'border-box' }}>
-        <button
-          onClick={() => setActiveTab('matches')}
-          style={{
-            flex: 1,
-            padding: '12px 6px',
-            borderRadius: '12px',
-            border: 'none',
-            fontSize: '0.95rem',
-            fontWeight: 'bold',
-            background: activeTab === 'matches' ? '#00853f' : '#141e18',
-            color: '#fff',
-            cursor: 'pointer',
-            textAlign: 'center'
-          }}
-        >
-          ⚽ مباريات اليوم
-        </button>
-        <button
-          onClick={() => setActiveTab('channels')}
-          style={{
-            flex: 1,
-            padding: '12px 6px',
-            borderRadius: '12px',
-            border: 'none',
-            fontSize: '0.95rem',
-            fontWeight: 'bold',
-            background: activeTab === 'channels' ? '#00853f' : '#141e18',
-            color: '#fff',
-            cursor: 'pointer',
-            textAlign: 'center'
-          }}
-        >
-          📺 قنوات beIN العربية
-        </button>
-      </div>
+      {/* قائمة المباريات المباشرة */}
+      <main style={{ padding: '16px', width: '100%', boxSizing: 'border-box' }}>
+        {loadingMatches ? (
+          <div style={{ textAlign: 'center', padding: '50px 0', color: '#6ee7b7' }}>جارٍ جلب المباريات المباشرة...</div>
+        ) : matches.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '50px 0', color: '#9ca3af' }}>لا توجد مباريات جارية حالياً.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+            {matches.map((m) => {
+              const isLive = m.status === 'live';
+              const homeName = m.homeTeam?.name || m.title.split('vs')[0];
+              const awayName = m.awayTeam?.name || m.title.split('vs')[1] || '';
 
-      {/* المحتوى الرئيسي */}
-      <main style={{ padding: '8px 16px 40px', width: '100%', boxSizing: 'border-box' }}>
-        
-        {/* تبويب قنوات beIN المسحوبة آلياً */}
-        {activeTab === 'channels' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-            {loadingChannels ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#6ee7b7' }}>جارٍ جلب القنوات المتاحة...</div>
-            ) : arabicChannels.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>لم يتم العثور على قنوات حالياً. اضغط تحديث.</div>
-            ) : (
-              arabicChannels.map((ch, idx) => (
+              return (
                 <div
-                  key={idx}
-                  onClick={() => startStream(ch.url, ch.name)}
+                  key={m.id}
+                  onClick={() => openMatchStreams(m)}
                   style={{
-                    background: 'linear-gradient(135deg, #132018 0%, #101913 100%)',
-                    border: '1.5px solid #1f3d28',
-                    borderRadius: '16px',
+                    background: 'linear-gradient(180deg, #142218 0%, #0c1410 100%)',
+                    border: '1.5px solid #1f3a26',
+                    borderRadius: '20px',
                     padding: '16px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
                     cursor: 'pointer',
                     width: '100%',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    position: 'relative'
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '46px', height: '46px', borderRadius: '12px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #00853f', fontSize: '1.3rem' }}>
-                      📡
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#fff' }}>{ch.name}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '3px' }}>بث مباشر متاح • تعليق عربي</div>
-                    </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <span style={{ fontSize: '0.75rem', background: '#09140d', color: '#34d399', padding: '4px 10px', borderRadius: '20px', border: '1px solid #1a3c26', fontWeight: 'bold' }}>
+                      {m.tournament || 'مباراة مباشرة'}
+                    </span>
+                    {isLive ? (
+                      <span style={{ fontSize: '0.75rem', background: '#d21034', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontWeight: '900' }}>
+                        ● مباشر
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>قريباً</span>
+                    )}
                   </div>
-                  <span style={{ background: '#00853f', color: '#fff', fontSize: '0.85rem', fontWeight: 'bold', padding: '8px 14px', borderRadius: '10px', whiteSpace: 'nowrap' }}>
-                    تشغيل ▶
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        )}
 
-        {/* تبويب المباريات */}
-        {activeTab === 'matches' && (
-          <>
-            {loadingMatches ? (
-              <div style={{ textAlign: 'center', padding: '50px 0', color: '#6ee7b7' }}>جارٍ جلب المباريات المباشرة...</div>
-            ) : matches.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '50px 0', color: '#9ca3af' }}>لا توجد مباريات جارية حالياً.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-                {matches.map((m) => {
-                  const isLive = m.status === 'live';
-                  const homeName = m.homeTeam?.name || m.title.split('vs')[0];
-                  const awayName = m.awayTeam?.name || m.title.split('vs')[1] || '';
-
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => openMatchStreams(m)}
-                      style={{
-                        background: 'linear-gradient(180deg, #142218 0%, #0c1410 100%)',
-                        border: '1.5px solid #1f3a26',
-                        borderRadius: '20px',
-                        padding: '16px',
-                        cursor: 'pointer',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                        position: 'relative'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                        <span style={{ fontSize: '0.75rem', background: '#09140d', color: '#34d399', padding: '4px 10px', borderRadius: '20px', border: '1px solid #1a3c26', fontWeight: 'bold' }}>
-                          {m.tournament || 'مباراة مباشرة'}
-                        </span>
-                        {isLive ? (
-                          <span style={{ fontSize: '0.75rem', background: '#d21034', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontWeight: '900' }}>
-                            ● مباشر
-                          </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px', width: '100%' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
+                        {m.homeTeam?.badge ? (
+                          <img src={m.homeTeam.badge} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                         ) : (
-                          <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>قريباً</span>
+                          <span style={{ fontSize: '1.6rem' }}>⚽</span>
                         )}
                       </div>
-
-                      {/* الفريقان وجهاً لوجه */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px', width: '100%' }}>
-                        
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                          <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
-                            {m.homeTeam?.badge ? (
-                              <img src={m.homeTeam.badge} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                            ) : (
-                              <span style={{ fontSize: '1.6rem' }}>⚽</span>
-                            )}
-                          </div>
-                          <span style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '8px', color: '#f3f4f6' }}>{homeName}</span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 8px' }}>
-                          <div style={{ background: '#050a07', border: '2px solid #00853f', borderRadius: '12px', padding: '6px 16px' }}>
-                            <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff', letterSpacing: '2px' }}>
-                              {m.homeScore ?? 0} : {m.awayScore ?? 0}
-                            </span>
-                          </div>
-                          <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 'bold', marginTop: '6px' }}>
-                            {m.currentMinute || 'VS'}
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                          <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
-                            {m.awayTeam?.badge ? (
-                              <img src={m.awayTeam.badge} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                            ) : (
-                              <span style={{ fontSize: '1.6rem' }}>⚽</span>
-                            )}
-                          </div>
-                          <span style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '8px', color: '#f3f4f6' }}>{awayName}</span>
-                        </div>
-                      </div>
-
-                      <button style={{ width: '100%', marginTop: '16px', background: 'linear-gradient(90deg, #00853f 0%, #00602e 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}>
-                        مشاهدة البث المباشر (اختيار السيرفر)
-                      </button>
+                      <span style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '8px', color: '#f3f4f6' }}>{homeName}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 8px' }}>
+                      <div style={{ background: '#050a07', border: '2px solid #00853f', borderRadius: '12px', padding: '6px 16px' }}>
+                        <span style={{ fontSize: '1.4rem', fontWeight: '900', color: '#fff', letterSpacing: '2px' }}>
+                          {m.homeScore ?? 0} : {m.awayScore ?? 0}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 'bold', marginTop: '6px' }}>
+                        {m.currentMinute || 'VS'}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                      <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
+                        {m.awayTeam?.badge ? (
+                          <img src={m.awayTeam.badge} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                        ) : (
+                          <span style={{ fontSize: '1.6rem' }}>⚽</span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '8px', color: '#f3f4f6' }}>{awayName}</span>
+                    </div>
+                  </div>
+
+                  <button style={{ width: '100%', marginTop: '16px', background: 'linear-gradient(90deg, #00853f 0%, #00602e 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}>
+                    مشاهدة البث المباشر (اختيار السيرفر)
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         )}
       </main>
 
-      {/* نافذة اختيار السيرفر المنبثقة من الأسفل */}
+      {/* نافذة اختيار السيرفر */}
       {selectedMatch && (
         <div style={{
           position: 'fixed',
@@ -327,7 +219,11 @@ export default function Home() {
                 {streams.map((s, idx) => (
                   <button
                     key={idx}
-                    onClick={() => startStream(s.proxiedUrl, `${selectedMatch} - ${s.name}`)}
+                    onClick={() => {
+                      // اختيار الرابط المباشر لمنع اختناق سيرفر Vercel
+                      const targetUrl = s.url || s.streamUrl || s.embedUrl || s.proxiedUrl;
+                      startStream(targetUrl, `${selectedMatch} - ${s.name}`);
+                    }}
                     style={{
                       background: '#18271e',
                       color: '#fff',
@@ -360,7 +256,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* مشغل الفيديو مع زر الإغلاق الدائري ✕ */}
+      {/* مشغل الفيديو المسرّع */}
       {activeStreamUrl && (
         <div style={{
           position: 'fixed',
@@ -411,7 +307,9 @@ export default function Home() {
             src={activeStreamUrl}
             style={{ width: '100%', height: '100%', border: 'none', flex: 1, background: '#000' }}
             allowFullScreen
-            allow="autoplay; encrypted-media; picture-in-picture"
+            loading="eager"
+            referrerPolicy="no-referrer"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
           />
         </div>
       )}
