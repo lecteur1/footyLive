@@ -25,18 +25,21 @@ export default function Home() {
     fetchMatches();
   }, []);
 
-  const fetchMatches = async () => {
+    const fetchMatches = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/matches');
       const data = await res.json();
-      setMatches(Array.isArray(data) ? data : []);
+      // استخراج المباريات سواء كانت المصفوفة مباشرة أو داخل حقل matches
+      const matchList = Array.isArray(data) ? data : (data.matches || []);
+      setMatches(matchList);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
   };
+
 
   const openMatchStreams = async (match) => {
     setSelectedMatch(match.title);
