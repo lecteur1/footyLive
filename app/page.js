@@ -1,15 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function Home() {
   const [matches, setMatches] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [streams, setStreams] = useState([]);
-  const [selectedMatch, setSelectedMatch] = useState(null);
-  const [loadingStreams, setLoadingStreams] = useState(false);
-  const [activeStreamUrl, setActiveStreamUrl] = useState(null);
-  const [playerTitle, setPlayerTitle] = useState('');
+  const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
+  const [selectedMatchTitle, setSelectedMatchTitle] = useState('');
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  const [failoverNotice, setFailoverNotice] = useState('');
+
+  const iframeRef = useRef(null);
+  const fallbackTimerRef = useRef(null);
 
   useEffect(() => {
     fetchMatches();
@@ -29,27 +32,73 @@ export default function Home() {
     }
   };
 
-  const openMatchStreams = async (match) => {
-    setSelectedMatch(match.title);
-    setLoadingStreams(true);
+  // فتح المباراة والبدء تلقائياً بأول سيرفر مع تفعيل مراقبة الفشل
+  const handleWatchMatch = async (match) => {
+    setSelectedMatchTitle(match.title);
+    setIsPlayerOpen(true);
     setStreams([]);
+    setCurrentStreamIndex(0);
+    setFailoverNotice('جارٍ فحص أفضل سيرفر للبث...');
+
     try {
       const res = await fetch(`/api/streams/${match.id}`);
       const data = await res.json();
-      setStreams(data.streams || []);
+      const availableStreams = data.streams || [];
+
+      if (availableStreams.length > 0) {
+        setStreams(availableStreams);
+        playStreamAtIndex(0, availableStreams);
+      } else {
+        setFailoverNotice('عذراً، لم تتوفر سيرفرات لهذه المباراة بعد.');
+      }
     } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingStreams(false);
+      setFailoverNotice('تعذر جلب السيرفرات، يرجى المحاولة لاحقاً.');
     }
   };
 
-  const startStream = (url, title) => {
-    setSelectedMatch(null);
-    setPlayerTitle(title);
-    const fullUrl = url.startsWith('/') ? window.location.origin + url : url;
-    setActiveStreamUrl(fullUrl);
+  const playStreamAtIndex = (index, streamsList = streams) => {
+    if (!streamsList || streamsList.length === 0 || index >= streamsList.length) {
+      setFailoverNotice('تم تجربة جميع السيرفرات المتوفرة دون استجابة.');
+      return;
+    }
+
+    setCurrentStreamIndex(index);
+    const target = streamsList[index];
+    const streamName = target.name || `Server ${index + 1}`;
+    setFailoverNotice(`يعمل الآن: ${streamName}`);
+
+    // مؤقت فحص: إذا لم يستجب السيرفر خلال 7 ثوانٍ، ينتقل للسيرفر التالي آلياً
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+
+    fallbackTimerRef.current = setTimeout(() => {
+      if (index + 1 < streamsList.length) {
+        const nextIndex = index + 1;
+        const nextName = streamsList[nextIndex].name || `Server ${nextIndex + 1}`;
+        setFailoverNotice(`السيرفر لم يستجب، جارٍ الانتقال تلقائياً إلى ${nextName}...`);
+        playStreamAtIndex(nextIndex, streamsList);
+      }
+    }, 7000);
   };
+
+  const handleIframeLoad = () => {
+    // بمجرد نجاح تحميل السيرفر يتم إلغاء مؤقت الفشل
+    if (fallbackTimerRef.current) {
+      clearTimeout(fallbackTimerRef.current);
+    }
+    const currentName = streams[currentStreamIndex]?.name || `Server ${currentStreamIndex + 1}`;
+    setFailoverNotice(`متصل الآن بـ: ${currentName}`);
+    setTimeout(() => setFailoverNotice(''), 3000);
+  };
+
+  const closePlayer = () => {
+    if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
+    setIsPlayerOpen(false);
+    setStreams([]);
+    setFailoverNotice('');
+  };
+
+  const currentStream = streams[currentStreamIndex];
+  const activeUrl = currentStream ? (currentStream.url || currentStream.streamUrl || currentStream.embedUrl || currentStream.proxiedUrl) : '';
 
   return (
     <div style={{
@@ -66,7 +115,7 @@ export default function Home() {
       overflowX: 'hidden'
     }}>
       
-      {/* شريط الراية الوطنية */}
+      {/* شريط العلم الجزائري */}
       <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #00853f 33.3%, #ffffff 33.3%, #ffffff 66.6%, #d21034 66.6%)' }}></div>
 
       {/* الشريط العلوي */}
@@ -95,7 +144,7 @@ export default function Home() {
         </button>
       </header>
 
-      {/* قائمة المباريات المباشرة */}
+      {/* قائمة المباريات */}
       <main style={{ padding: '16px', width: '100%', boxSizing: 'border-box' }}>
         {loadingMatches ? (
           <div style={{ textAlign: 'center', padding: '50px 0', color: '#6ee7b7' }}>جارٍ جلب المباريات المباشرة...</div>
@@ -111,7 +160,7 @@ export default function Home() {
               return (
                 <div
                   key={m.id}
-                  onClick={() => openMatchStreams(m)}
+                  onClick={() => handleWatchMatch(m)}
                   style={{
                     background: 'linear-gradient(180deg, #142218 0%, #0c1410 100%)',
                     border: '1.5px solid #1f3a26',
@@ -173,7 +222,7 @@ export default function Home() {
                   </div>
 
                   <button style={{ width: '100%', marginTop: '16px', background: 'linear-gradient(90deg, #00853f 0%, #00602e 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}>
-                    مشاهدة البث المباشر (اختيار السيرفر)
+                    مشاهدة البث المباشر (تشغيل تلقائي)
                   </button>
                 </div>
               );
@@ -182,82 +231,8 @@ export default function Home() {
         )}
       </main>
 
-      {/* نافذة اختيار السيرفر */}
-      {selectedMatch && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'flex-end',
-          zIndex: 99999
-        }}>
-          <div style={{
-            background: '#121d16',
-            width: '100%',
-            maxWidth: '500px',
-            borderTopLeftRadius: '24px',
-            borderTopRightRadius: '24px',
-            padding: '24px 20px',
-            borderTop: '3px solid #00853f',
-            maxHeight: '75vh',
-            overflowY: 'auto',
-            boxSizing: 'border-box'
-          }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', marginBottom: '16px', textAlign: 'center', color: '#10b981' }}>{selectedMatch}</h3>
-            
-            {loadingStreams ? (
-              <p style={{ color: '#6ee7b7', textAlign: 'center', padding: '24px' }}>جارٍ جلب السيرفرات المتاحة...</p>
-            ) : streams.length === 0 ? (
-              <p style={{ color: '#ff4d4f', textAlign: 'center', padding: '24px' }}>لم تبدأ روابط هذه المباراة بعد.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {streams.map((s, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      // اختيار الرابط المباشر لمنع اختناق سيرفر Vercel
-                      const targetUrl = s.url || s.streamUrl || s.embedUrl || s.proxiedUrl;
-                      startStream(targetUrl, `${selectedMatch} - ${s.name}`);
-                    }}
-                    style={{
-                      background: '#18271e',
-                      color: '#fff',
-                      border: '1px solid #284431',
-                      padding: '14px 16px',
-                      borderRadius: '12px',
-                      fontSize: '0.95rem',
-                      fontWeight: 'bold',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      width: '100%'
-                    }}
-                  >
-                    <span>{s.name}</span>
-                    <span style={{ background: '#00853f', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem' }}>{s.quality}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            
-            <button
-              onClick={() => setSelectedMatch(null)}
-              style={{ width: '100%', background: '#d21034', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', marginTop: '16px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}
-            >
-              إلغاء وإغلاق
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* مشغل الفيديو المسرّع */}
-      {activeStreamUrl && (
+      {/* مشغل الفيديو المزود بميزة التبديل التلقائي والسريع */}
+      {isPlayerOpen && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -271,6 +246,7 @@ export default function Home() {
           width: '100vw',
           height: '100vh'
         }}>
+          {/* شريط رأس المشغل */}
           <div style={{
             background: '#111a14',
             padding: '10px 16px',
@@ -279,11 +255,11 @@ export default function Home() {
             alignItems: 'center',
             borderBottom: '1px solid #1c2e21'
           }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
-              {playerTitle}
+            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>
+              {selectedMatchTitle}
             </span>
             <button
-              onClick={() => setActiveStreamUrl(null)}
+              onClick={closePlayer}
               style={{
                 background: '#d21034',
                 color: '#fff',
@@ -303,14 +279,59 @@ export default function Home() {
               ✕
             </button>
           </div>
-          <iframe
-            src={activeStreamUrl}
-            style={{ width: '100%', height: '100%', border: 'none', flex: 1, background: '#000' }}
-            allowFullScreen
-            loading="eager"
-            referrerPolicy="no-referrer"
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-          />
+
+          {/* شريط التنبيه الذكي لحالة السيرفر */}
+          {failoverNotice && (
+            <div style={{ background: '#0a2315', color: '#34d399', padding: '6px 14px', fontSize: '0.75rem', textAlign: 'center', borderBottom: '1px solid #144026' }}>
+              {failoverNotice}
+            </div>
+          )}
+
+          {/* شريط أزرار السيرفرات للتبديل اليدوي السريع أيضاً */}
+          {streams.length > 1 && (
+            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '8px 12px', background: '#0b120e', borderBottom: '1px solid #16241a' }}>
+              {streams.map((s, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => playStreamAtIndex(idx)}
+                  style={{
+                    background: currentStreamIndex === idx ? '#00853f' : '#17241c',
+                    color: '#fff',
+                    border: '1px solid #233e2c',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {s.name || `Server ${idx + 1}`}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* شاشة العرض مع مراقبة التحميل */}
+          <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%', background: '#000' }}>
+            {activeUrl ? (
+              <iframe
+                ref={iframeRef}
+                key={activeUrl}
+                src={activeUrl}
+                onLoad={handleIframeLoad}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+                allowFullScreen
+                loading="eager"
+                referrerPolicy="no-referrer"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              />
+            ) : (
+              <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
+                جارٍ الاتصال بأسرع سيرفر...
+              </div>
+            )}
+          </div>
         </div>
       )}
 
