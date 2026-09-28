@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Footy Live</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #0e1117; color: #fff; padding-bottom: 70px; }
+    header { background: #161b22; padding: 15px; text-align: center; font-size: 1.2rem; font-weight: bold; border-bottom: 1px solid #30363d; position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+    .badge-live { background: #e50914; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    
+    .matches-container { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .match-card { background: #1f242c; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid #2d333b; cursor: pointer; transition: 0.2s; }
+    .match-card:active { transform: scale(0.98); background: #262c36; }
+    .tournament { font-size: 0.8rem; color: #8b949e; }
+    .teams { display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; font-weight: 600; }
+    .status-text { font-size: 0.8rem; color: #3fb950; font-weight: bold; }
+
+    /* نافذة اختيار السيرفرات */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; justify-content: center; align-items: flex-end; }
+    .modal-content { background: #161b22; width: 100%; border-radius: 16px 16px 0 0; padding: 20px; max-height: 80vh; overflow-y: auto; }
+    .server-btn { background: #238636; color: #fff; border: none; width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; font-size: 1rem; font-weight: bold; }
+    .close-btn { background: #30363d; color: #c9d1d9; border: none; width: 100%; padding: 10px; border-radius: 8px; margin-top: 10px; }
+
+    /* شاشة مشغل الفيديو */
+    .player-view { display: none; position: fixed; inset: 0; background: #000; z-index: 200; flex-direction: column; }
+    .player-header { padding: 10px; display: flex; justify-content: space-between; background: #161b22; }
+    iframe { width: 100%; height: 100%; border: none; flex: 1; }
+
+    /* مكان البانر الإعلاني الثابت */
+    .ad-banner { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: #161b22; border-top: 1px solid #30363d; display: flex; justify-content: center; align-items: center; font-size: 0.8rem; color: #8b949e; z-index: 5; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span>Footy Live</span>
+    <button onclick="loadMatches()" style="background:none; border:none; color:#58a6ff; font-size:0.9rem;">تحديث</button>
+  </header>
+
+  <div class="matches-container" id="matchesList">
+    <div style="text-align:center; padding: 20px; color:#8b949e;">جارٍ تحميل المباريات...</div>
+  </div>
+
+  <!-- مكان الإعلان الثابت أسفل الشاشة -->
+  <div class="ad-banner">
+    <!-- ضع كود بانر AdMob / Adsterra هنا -->
+    <span>مساحة إعلانية (Banner Ad)</span>
+  </div>
+
+  <!-- نافذة السيرفرات -->
+  <div class="modal" id="serverModal">
+    <div class="modal-content">
+      <h3 style="margin-bottom:12px;" id="modalMatchTitle">اختر سيرفر المشاهدة</h3>
+      <div id="serversList">جارٍ البحث عن السيرفرات...</div>
+      <button class="close-btn" onclick="closeModal()">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- واجهة المشغل -->
+  <div class="player-view" id="playerView">
+    <div class="player-header">
+      <span id="playingTitle">مشغل البث</span>
+      <button onclick="closePlayer()" style="background:#e50914; border:none; color:#fff; padding:4px 10px; border-radius:4px;">إغلاق X</button>
+    </div>
+    <iframe id="videoIframe" allowfullscreen sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+  </div>
+
+  <script>
+    const API_BASE = "https://footy-live-cyan.vercel.app";
+
+    async function loadMatches() {
+      const container = document.getElementById('matchesList');
+      container.innerHTML = '<div style="text-align:center; padding:20px; color:#8b949e;">جارٍ جلب المباريات...</div>';
+      try {
+        const res = await fetch(`${API_BASE}/api/matches`);
+        const matches = await res.json();
+        container.innerHTML = '';
+
+        if (!matches || matches.length === 0) {
+          container.innerHTML = '<div style="text-align:center; padding:20px;">لا توجد مباريات جارية حالياً.</div>';
+          return;
+        }
+
+        matches.forEach(m => {
+          const isLive = m.status === 'live';
+          const card = document.createElement('div');
+          card.className = 'match-card';
+          card.innerHTML = `
+            <div class="tournament">${m.tournament || 'مباراة مباشرة'}</div>
+            <div class="teams">
+              <span>${m.homeTeam?.name || m.title.split('vs')[0]}</span>
+              <span>${m.homeScore ?? 0} - ${m.awayScore ?? 0}</span>
+              <span>${m.awayTeam?.name || m.title.split('vs')[1] || ''}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="status-text">${isLive ? '<span class="badge-live">مباشر LIVE</span>' : 'قريباً'}</span>
+              <span style="font-size:0.8rem; color:#58a6ff;">مشاهدة السيرفرات ←</span>
+            </div>
+          `;
+          card.onclick = () => openServers(m.id, m.title);
+          container.appendChild(card);
+        });
+      } catch (err) {
+        container.innerHTML = '<div style="text-align:center; color:#ff7b72; padding:20px;">فشل الاتصال بالخادم. حاول مجدداً.</div>';
+      }
+    }
+
+    async function openServers(matchId, title) {
+      const modal = document.getElementById('serverModal');
+      const list = document.getElementById('serversList');
+      document.getElementById('modalMatchTitle').innerText = title;
+      modal.style.display = 'flex';
+      list.innerHTML = 'جارٍ البحث عن الروابط المتاحة...';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/streams/${matchId}`);
+        const data = await res.json();
+        list.innerHTML = '';
+
+        if (!data.streams || data.streams.length === 0) {
+          list.innerHTML = '<div style="color:#ff7b72;">لم تبدأ السيرفرات بعد أو لا يوجد بث متوفر.</div>';
+          return;
+        }
+
+        data.streams.forEach(s => {
+          const btn = document.createElement('button');
+          btn.className = 'server-btn';
+          btn.innerText = `${s.name} (${s.quality})`;
+          btn.onclick = () => {
+            closeModal();
+            playStream(API_BASE + s.proxiedUrl, title);
+          };
+          list.appendChild(btn);
+        });
+      } catch (e) {
+        list.innerHTML = '<div style="color:#ff7b72;">خطأ أثناء جلب السيرفرات.</div>';
+      }
+    }
+
+    function playStream(url, title) {
+      document.getElementById('playingTitle').innerText = title;
+      const iframe = document.getElementById('videoIframe');
+      iframe.src = url;
+      document.getElementById('playerView').style.display = 'flex';
+    }
+
+    function closePlayer() {
+      const iframe = document.getElementById('videoIframe');
+      iframe.src = '';
+      document.getElementById('playerView').style.display = 'none';
+    }
+
+    function closeModal() {
+      document.getElementById('serverModal').style.display = 'none';
+    }
+
+    // التحميل المباشر عند الفتح
+    loadMatches();
+  </script>
+</body>
+</html>
