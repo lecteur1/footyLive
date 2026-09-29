@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="referrer" content="no-referrer">
     <style>
       html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
       iframe { width: 100%; height: 100%; border: 0; }
@@ -47,6 +46,7 @@ export async function GET(request: NextRequest) {
   <body>
     <iframe 
       src="${decoded}" 
+      sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
       allowfullscreen="true" 
       webkitallowfullscreen="true" 
       mozallowfullscreen="true"
