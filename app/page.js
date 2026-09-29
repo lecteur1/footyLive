@@ -186,11 +186,13 @@ export default function Home() {
               ) : currentUrl ? (
                 <iframe
   key={currentUrl}
-  src={`/api/proxy?url=${encodeURIComponent(currentUrl)}`}
+  src={currentUrl}
   style={{ width: '100%', height: '100%', border: 'none' }}
   allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
   allowFullScreen
+  sandbox="allow-scripts allow-same-origin allow-presentation"
 />
+
 
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
