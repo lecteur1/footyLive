@@ -7,8 +7,8 @@ import logger from '../logger';
 
 const STREAMED_API = 'https://streamed.pk/api/matches/football';
 const STREAMED_STREAM = 'https://streamed.pk/api/stream';
-const TIMEOUT_MS = 4000;
-const SHORT_TIMEOUT = 2500;
+const TIMEOUT_MS = 5000;
+const SHORT_TIMEOUT = 3000;
 
 interface StreamedRawMatch {
   id: string;
@@ -39,10 +39,46 @@ export class StreamedPkProvider implements StreamProvider {
     }, 30);
   }
 
+  // تفعيل الدالة لسحب كل مباريات اليوم بدلاً من إرجاع مصفوفة فارغة
   async fetchMatches(): Promise<Match[]> {
-    // Streamed.pk matches are not listed top-level,
-    // they are resolved dynamically as fallback channels.
-    return [];
+    try {
+      const raw = await this.fetchRawMatches();
+      const now = Date.now();
+
+      return raw.map((m: StreamedRawMatch) => {
+        let home = m.teams?.home?.name || '';
+        let away = m.teams?.away?.name || '';
+
+        if ((!home || !away) && m.title) {
+          const parts = m.title.split(/\s+(?:vs\.?|-)\s+/i);
+          if (parts.length >= 2) {
+            home = home || parts[0].trim();
+            away = away || parts[1].trim();
+          }
+        }
+
+        const matchTime = m.date || now;
+        // تعتبر المباراة جارية إذا كان وقتها الآن أو مر عليها أقل من ساعتين
+        const isLive = matchTime <= now && (now - matchTime) < 130 * 60 * 1000;
+
+        return {
+          id: m.id || `${home}-vs-${away}`,
+          title: m.title || `${home} vs ${away}`,
+          team1: home || 'الفريق 1',
+          team2: away || 'الفريق 2',
+          homeTeam: home || 'الفريق 1',
+          awayTeam: away || 'الفريق 2',
+          tournament: m.category || 'كرة قدم',
+          status: isLive ? 'live' : 'upcoming',
+          timestamp: matchTime,
+          time: new Date(matchTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          hasStreams: (m.sources && m.sources.length > 0) || false,
+        } as Match;
+      });
+    } catch (err) {
+      logger.error('Streamed.pk fetchMatches conversion failed', err);
+      return [];
+    }
   }
 
   private async resolveStreamedStream(source: string, id: string): Promise<{ url: string; quality: string }[]> {
