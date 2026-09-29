@@ -5,20 +5,15 @@ import { useState, useEffect, useRef } from 'react';
 export default function Home() {
   const [matches, setMatches] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
+  const [loadingStream, setLoadingStream] = useState(false);
   const [streams, setStreams] = useState([]);
   const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
-  const [shieldActive, setShieldActive] = useState(true);
 
   const playerContainerRef = useRef(null);
-  const iframeRef = useRef(null);
 
   useEffect(() => {
-    try {
-      window.open = () => null;
-    } catch (e) {}
-
     fetchMatches();
   }, []);
 
@@ -51,18 +46,53 @@ export default function Home() {
     return '00:00';
   };
 
-  const handleOpenMatch = (match) => {
+  // جلب السيرفرات للمباراة المحددة مباشرة
+  const handleOpenMatch = async (match) => {
     setActiveMatch(match);
-    const availableStreams = match.streams || (match.url ? [{ title: 'Server 1', url: match.url }] : []);
-    setStreams(availableStreams);
-    setCurrentStreamIndex(0);
-    setShieldActive(true);
     setIsPlayerOpen(true);
-  };
+    setLoadingStream(true);
+    setStreams([]);
+    setCurrentStreamIndex(0);
 
-  const handleServerSwitch = (index) => {
-    setCurrentStreamIndex(index);
-    setShieldActive(true);
+    try {
+      const res = await fetch(`/api/streams/${match.id}`);
+      const data = await res.json();
+
+      let streamList = [];
+      if (Array.isArray(data?.streams) && data.streams.length > 0) {
+        streamList = data.streams;
+      } else if (Array.isArray(data?.channels) && data.channels.length > 0) {
+        streamList = data.channels;
+      } else if (data?.defaultUrl || data?.url) {
+        streamList = [{ name: 'Server 1 (Live HD)', url: data.defaultUrl || data.url }];
+      }
+
+      // روابط احتياطية فورية في حال عدم توفر رد خارجي
+      if (streamList.length === 0) {
+        const title = (match.title || `${match.team1} ${match.team2}`).toLowerCase();
+        let targetUrl = 'https://embedstream.me/bein-sports-1-stream-1';
+
+        if (title.includes('الجزائر') || title.includes('algeria') || title.includes('burundi') || title.includes('بوروندي')) {
+          targetUrl = 'https://topembed.pw/channel/beIN_Sports_2_HD';
+        } else if (title.includes('مصر') || title.includes('egypt') || title.includes('السودان')) {
+          targetUrl = 'https://topembed.pw/channel/beIN_Sports_1_HD';
+        }
+
+        streamList = [
+          { name: 'Server 1 (Live HD)', url: targetUrl },
+          { name: 'Server 2 (Backup Web)', url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html' }
+        ];
+      }
+
+      setStreams(streamList);
+    } catch (err) {
+      console.error(err);
+      setStreams([
+        { name: 'Server 1 (Live)', url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html' }
+      ]);
+    } finally {
+      setLoadingStream(false);
+    }
   };
 
   const handleToggleFullscreen = () => {
@@ -123,7 +153,7 @@ export default function Home() {
       {/* Main Container */}
       <div style={{ maxWidth: '650px', margin: '0 auto', padding: '16px' }}>
 
-        {/* Video Player */}
+        {/* Video Player المباشر والنظيف */}
         {isPlayerOpen && (
           <div
             style={{
@@ -151,8 +181,8 @@ export default function Home() {
               >
                 ✕
               </button>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#00cc66', direction: 'ltr' }}>
-                {activeMatch?.team1} vs {activeMatch?.team2}
+              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#00cc66' }}>
+                {activeMatch?.team1 || activeMatch?.homeTeam?.name || 'الفريق 1'} vs {activeMatch?.team2 || activeMatch?.awayTeam?.name || 'الفريق 2'}
               </div>
             </div>
 
@@ -167,74 +197,21 @@ export default function Home() {
                 overflow: 'hidden',
               }}
             >
-              {streams.length > 0 && streams[currentStreamIndex]?.url ? (
+              {loadingStream ? (
+                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66' }}>
+                  جاري جلب وتشغيل البث المباشر...
+                </div>
+              ) : streams.length > 0 && streams[currentStreamIndex]?.url ? (
                 <iframe
-                  ref={iframeRef}
                   src={streams[currentStreamIndex].url}
                   style={{ width: '100%', height: '100%', border: 'none' }}
                   allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                   allowFullScreen
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                  جاري جلب البث أو السيرفر غير متوفر حالياً...
-                </div>
-              )}
-
-              {/* Click Shield Overlay */}
-              {shieldActive && (
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setShieldActive(false);
-                  }}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    zIndex: 50,
-                    backdropFilter: 'blur(3px)',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: '64px',
-                      height: '64px',
-                      borderRadius: '50%',
-                      backgroundColor: '#00853f',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 4px 20px rgba(0, 133, 63, 0.6)',
-                      marginBottom: '10px',
-                    }}
-                  >
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </div>
-                  <span
-                    style={{
-                      color: '#fff',
-                      fontSize: '13px',
-                      fontWeight: 'bold',
-                      background: 'rgba(0,0,0,0.7)',
-                      padding: '6px 14px',
-                      borderRadius: '20px',
-                      border: '1px solid #00853f',
-                    }}
-                  >
-                    انقر هنا لفك قفل المشغل وبدء البث 🛡️
-                  </span>
+                  جاري الاتصال بالسيرفر...
                 </div>
               )}
             </div>
@@ -255,18 +232,19 @@ export default function Home() {
                 ⛶ تكبير الشاشة
               </button>
               <div style={{ fontSize: '12px', color: '#00cc66' }}>
-                متصل بالبث (انقر زر التشغيل)
+                ● البث مباشر
               </div>
             </div>
 
+            {/* أزرار السيرفرات */}
             {streams.length > 1 && (
               <div style={{ marginTop: '14px' }}>
-                <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>اختر سيرفر البث (في حال التقطيع):</div>
+                <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>اختر سيرفر البث:</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {streams.map((s, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleServerSwitch(idx)}
+                      onClick={() => setCurrentStreamIndex(idx)}
                       style={{
                         flex: 1,
                         minWidth: '100px',
@@ -280,7 +258,7 @@ export default function Home() {
                         cursor: 'pointer',
                       }}
                     >
-                      {s.title || `Server ${idx + 1}`}
+                      {s.name || s.title || s.label || `Server ${idx + 1}`}
                     </button>
                   ))}
                 </div>
@@ -311,12 +289,12 @@ export default function Home() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {matches.map((match, idx) => {
-              const teamHome = match.team1 || match.homeTeam || 'فريق 1';
-              const teamAway = match.team2 || match.awayTeam || 'فريق 2';
+              const teamHome = typeof match.homeTeam === 'object' ? (match.homeTeam?.name || match.team1) : (match.team1 || match.homeTeam || 'فريق 1');
+              const teamAway = typeof match.awayTeam === 'object' ? (match.awayTeam?.name || match.team2) : (match.team2 || match.awayTeam || 'فريق 2');
 
               return (
                 <div
-                  key={idx}
+                  key={match.id || idx}
                   style={{
                     backgroundColor: '#111813',
                     borderRadius: '14px',
