@@ -10,6 +10,7 @@ export default function Home() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [failoverNotice, setFailoverNotice] = useState('');
+  const [adShieldActive, setAdShieldActive] = useState(true);
 
   const playerContainerRef = useRef(null);
   const iframeRef = useRef(null);
@@ -17,6 +18,12 @@ export default function Home() {
 
   useEffect(() => {
     fetchMatches();
+
+    if (typeof window !== 'undefined') {
+      window.open = function () {
+        return null;
+      };
+    }
   }, []);
 
   const fetchMatches = async () => {
@@ -61,11 +68,12 @@ export default function Home() {
 
       setActiveMatch(match);
       setIsPlayerOpen(true);
+      setAdShieldActive(true);
       setStreams(availableStreams);
       setCurrentStreamIndex(0);
       playStreamAtIndex(0, availableStreams);
     } catch (e) {
-      alert('تعذر جلب السيرفرات، يرجى المحاولة لاحقاً.');
+      alert('تعذر جلب السيرفرات حالياً، يرجى المحاولة لاحقاً.');
     }
   };
 
@@ -76,6 +84,7 @@ export default function Home() {
     }
 
     setCurrentStreamIndex(index);
+    setAdShieldActive(true);
     const target = streamsList[index];
     const streamName = target.name || `Server ${index + 1}`;
     setFailoverNotice(`السيرفر: ${streamName}`);
@@ -123,7 +132,6 @@ export default function Home() {
     }
   };
 
-  // الأولوية دائماً للرابط المحمي عبر البروكسي لقتل الإعلانات
   const currentStream = streams[currentStreamIndex];
   const activeUrl = currentStream ? (currentStream.proxiedUrl || currentStream.url || currentStream.streamUrl) : '';
 
@@ -276,7 +284,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* مشغل الفيديو بنسبة 16:9 وعناصر التحكم العصرية */}
+      {/* مشغل الفيديو المزود بدرع حماية اللمس */}
       {isPlayerOpen && (
         <div style={{
           position: 'fixed',
@@ -325,7 +333,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* حاوية 16:9 بنظام التكبير التلقائي */}
+          {/* حاوية الفيديو مع درع امتصاص أول نقرة */}
           <div 
             ref={playerContainerRef}
             style={{
@@ -352,6 +360,23 @@ export default function Home() {
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
                 جارٍ الاتصال بأسرع سيرفر...
               </div>
+            )}
+
+            {/* درع اللمس الشفاف: يمتص النقرة الأولى لمنع التبويب الإعلاني ثم يختفي */}
+            {adShieldActive && (
+              <div
+                onClick={() => setAdShieldActive(false)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  background: 'transparent',
+                  zIndex: 5,
+                  cursor: 'pointer'
+                }}
+              />
             )}
 
             <button
@@ -421,8 +446,8 @@ export default function Home() {
                 🏆 {activeMatch?.tournament || 'مباراة مباشرة'}
               </div>
               <div style={{ fontSize: '0.8rem', color: '#d1d5db', lineHeight: '1.6' }}>
-                • تم دمج نظام الحماية التلقائي لمنع فتح علامات التبويب الخارجية.<br />
-                • انقر على <b>⛶ تكبير الشاشة</b> لمشاهدة المباراة بالعرض الكامل لهاتفك.
+                • انقر مرة واحدة داخل مربع الفيديو لبدء التشغيل مع امتصاص النوافذ الإعلانية.<br />
+                • استخدم زر <b>⛶ تكبير الشاشة</b> للحصول على عرض أفقي كامل.
               </div>
             </div>
           </div>
