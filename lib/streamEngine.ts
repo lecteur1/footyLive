@@ -18,7 +18,6 @@ const providers = [
   new StreamedPkProvider(),
 ];
 
-// قاموس ترجمة أسماء الفرق للبحث في سيرفرات البث الأجنبية
 const TEAM_TRANSLATIONS: Record<string, string> = {
   'مصر': 'Egypt',
   'جنوب السودان': 'South Sudan',
@@ -41,6 +40,9 @@ const TEAM_TRANSLATIONS: Record<string, string> = {
 };
 
 export function getStreamRedirectUrl(originalUrl: string): string {
+  if (originalUrl.includes('embed') || originalUrl.includes('player') || originalUrl.startsWith('/')) {
+    return originalUrl;
+  }
   const encoded = Buffer.from(originalUrl).toString('base64url');
   const expires = Date.now() + 4 * 60 * 60 * 1000;
   const signature = crypto
@@ -83,53 +85,67 @@ export async function resolveAllStreams(
   preFetchedMatch: any = null
 ): Promise<{ url: string; proxiedUrl: string; channels: Channel[]; serverCount: number }> {
   const cache = getCacheManager();
-  const cacheKey = `streams_${matchId}`;
+  const cacheKey = `streams_v4_${matchId || matchTitle}`;
 
   return cache.swr(cacheKey, async () => {
-    // استخراج أسماء البحث بالإنجليزية
     const hEn = preFetchedMatch?.homeEn || TEAM_TRANSLATIONS[homeTeam] || homeTeam;
     const aEn = preFetchedMatch?.awayEn || TEAM_TRANSLATIONS[awayTeam] || awayTeam;
     const enTitle = `${hEn} vs ${aEn}`;
 
     const streamProviders = providers.filter(p => p.id !== 'arabic_fixtures');
-    const resolveTasks = streamProviders.map(async provider => {
-      try {
-        // البحث بالاسم الإنجليزي أولاً لضمان إيجاد السيرفر في المواقع الأجنبية
-        const res = await provider.resolveStreams(enTitle, hEn, aEn, matchId, preFetchedMatch);
-        if (Array.isArray(res) && res.length > 0) return res;
-        // محاولة ثانية بالاسم الأصلي
-        return await provider.resolveStreams(matchTitle, homeTeam, awayTeam, matchId, preFetchedMatch);
-      } catch (err) {
-        return [];
-      }
-    });
-
-    const results = await Promise.allSettled(resolveTasks);
     const allServers: Channel[] = [];
 
-    for (const r of results) {
-      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-        allServers.push(...r.value);
+    // 1. محاولة جلب السيرفرات الحية من المزودات الخارجية
+    for (const provider of streamProviders) {
+      try {
+        const res = await provider.resolveStreams(enTitle, hEn, aEn, matchId, preFetchedMatch);
+        if (Array.isArray(res) && res.length > 0) {
+          allServers.push(...res);
+        }
+      } catch (err) {
+        // مواصلة البحث
       }
     }
 
-    // إذا لم تتوفر سيرفرات مخصصة للمباراة، نوفر قنوات beIN الرياضية المباشرة كبديل فوري
-    if (allServers.length === 0) {
-      allServers.push(
-        {
-          name: 'سيرفر beIN 1 (جودة متعددة)',
-          url: 'https://streamed.pk',
-          provider: 'streamed',
-          quality: 'HD',
-        },
-        {
-          name: 'سيرفر beIN 2 (بث احتياطي)',
-          url: 'https://api.cdnlivetv.tv',
-          provider: 'cdnlive',
-          quality: 'HD',
-        }
-      );
+    // 2. توفير سيرفرات بث مباشرة مخصصة للمباراة لتفادي الشاشة السوداء نهائياً
+    const titleLower = `${matchTitle} ${enTitle}`.toLowerCase();
+    
+    // تخصيص القنوات حسب المباراة المحددة
+    let channelEmbed1 = 'https://embedstream.me/bein-sports-1-stream-1';
+    let channelEmbed2 = 'https://embedstream.me/bein-sports-2-stream-1';
+
+    if (titleLower.includes('algeria') || titleLower.includes('الجزائر')) {
+      channelEmbed1 = 'https://embedstream.me/bein-sports-2-stream-1'; // القناة الناقلة لمباراة الجزائر
+      channelEmbed2 = 'https://embedstream.me/bein-sports-1-stream-1';
+    } else if (titleLower.includes('egypt') || titleLower.includes('مصر')) {
+      channelEmbed1 = 'https://embedstream.me/bein-sports-1-stream-1';
+      channelEmbed2 = 'https://embedstream.me/bein-sports-6-stream-1';
+    } else if (titleLower.includes('saudi') || titleLower.includes('السعودية')) {
+      channelEmbed1 = 'https://embedstream.me/alkass-one-stream-1';
+      channelEmbed2 = 'https://embedstream.me/ssc-1-stream-1';
     }
+
+    // إضافة السيرفرات المباشرة القابلة للتشغيل داخل iframe
+    allServers.push(
+      {
+        name: 'سيرفر beIN الرئيسي (HD)',
+        url: channelEmbed1,
+        provider: 'bein_live',
+        quality: '1080p',
+      },
+      {
+        name: 'سيرفر بديل (جودة متعددة)',
+        url: channelEmbed2,
+        provider: 'bein_alt',
+        quality: '720p',
+      },
+      {
+        name: 'سيرفر احتياطي سريع',
+        url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+        provider: 'direct_cdn',
+        quality: 'HD',
+      }
+    );
 
     const seenUrls = new Set<string>();
     const uniqueServers: Channel[] = [];
@@ -138,23 +154,19 @@ export async function resolveAllStreams(
     for (const server of allServers) {
       if (!seenUrls.has(server.url)) {
         seenUrls.add(server.url);
-        const serverLabel = server.name && !server.name.startsWith('Server')
-          ? server.name
-          : `سيرفر ${serverIndex++} (بث مباشر)`;
-
         uniqueServers.push({
           ...server,
-          name: serverLabel,
-          proxiedUrl: getStreamRedirectUrl(server.url),
+          name: server.name || `سيرفر ${serverIndex++}`,
+          proxiedUrl: server.url,
         });
       }
     }
 
     return {
       url: uniqueServers[0].url,
-      proxiedUrl: uniqueServers[0].proxiedUrl || getStreamRedirectUrl(uniqueServers[0].url),
+      proxiedUrl: uniqueServers[0].proxiedUrl,
       channels: uniqueServers,
       serverCount: uniqueServers.length,
     };
-  }, 30);
+  }, 10);
 }
