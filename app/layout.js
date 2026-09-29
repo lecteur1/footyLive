@@ -28,6 +28,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className="dark" style={{ background: '#090e0b', colorScheme: 'dark' }}>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: "if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js');});}" }} />
+
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
