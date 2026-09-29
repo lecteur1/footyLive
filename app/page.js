@@ -12,6 +12,7 @@ export default function Home() {
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
 
   const playerContainerRef = useRef(null);
+  const iframeRef = useRef(null);
 
   useEffect(() => {
     fetchMatches();
@@ -19,39 +20,36 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const originalOpen = window.open;
 
-      // السماح لنطاق التطبيق فقط بمنع النوافذ الإعلانية الصادرة من أي سيرفر خارجي
+      // حظر أي محاولة فتح نوافذ جديدة لا تخص نطاق التطبيق نفسه
       window.open = function (url, target, features) {
         if (!url || typeof url !== 'string') return null;
 
         try {
           const targetUrl = new URL(url, window.location.href);
-          // حظر أي نافذة تتجه إلى نطاق مختلف عن نطاق التطبيق الحالي
-          if (targetUrl.hostname !== window.location.hostname) {
-            console.warn('Blocked popup redirection:', targetUrl.origin);
-            return null;
+          if (targetUrl.hostname === window.location.hostname) {
+            return originalOpen.call(window, url, target, features);
           }
         } catch (e) {
           return null;
         }
 
-        return originalOpen.call(window, url, target, features);
+        console.warn('Blocked external popup');
+        return null;
       };
 
-      // اعتراض محاولات الإعلانات لتغيير مسار الصفحة بالكامل
-      const handleBeforeUnload = (e) => {
-        if (isPlayerOpen) {
-          // تثبيت المستخدم داخل التطبيق عند محاولة إعلان سحبه لصفحة خارجية
-          e.preventDefault();
-          return '';
+      const handleWindowBlur = () => {
+        // عند محاولة إعلان سحب التركيز خارج التطبيق يعيده فوراً
+        if (document.activeElement instanceof HTMLIFrameElement) {
+          window.focus();
         }
       };
 
-      window.addEventListener('beforeunload', handleBeforeUnload);
+      window.addEventListener('blur', handleWindowBlur);
       return () => {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
+        window.removeEventListener('blur', handleWindowBlur);
       };
     }
-  }, [isPlayerOpen]);
+  }, []);
 
   const fetchMatches = async () => {
     setLoadingMatches(true);
@@ -224,6 +222,7 @@ export default function Home() {
               ) : currentUrl ? (
                 <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                   <iframe
+                    ref={iframeRef}
                     key={currentUrl}
                     src={currentUrl}
                     style={{ width: '100%', height: '100%', border: 'none' }}
