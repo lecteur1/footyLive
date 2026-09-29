@@ -1,9 +1,13 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'الخضرة لايف — بث مباشر للمباريات',
-  description: 'تطبيق جزائري لمتابعة المباريات والبث المباشر بدون إعلانات مزعجة',
+  title: 'Saifou Sat | سيفو سات للبث المباشر',
+  description: 'بث مباشر للمباريات بجودة عالية وبدون تقطيع على سيفو سات.',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
+
 
 export const viewport = {
   width: 'device-width',
