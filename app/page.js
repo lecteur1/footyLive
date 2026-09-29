@@ -16,14 +16,11 @@ export default function Home() {
   useEffect(() => {
     fetchMatches();
 
-    // حظر النوافذ الإعلانية المنبثقة عبر سياسة القائمة البيضاء (Allowlist)
     if (typeof window !== 'undefined') {
       const originalOpen = window.open;
-
-      // تحديد النطاقات المسموح لها فقط بفتح نوافذ جديدة
       const allowedHosts = [
-        window.location.hostname, // موقعك
-        'embed.st',               // مزود المشغل الرئيسي
+        window.location.hostname,
+        'embed.st',
       ];
 
       window.open = function (url, target, features) {
@@ -40,11 +37,10 @@ export default function Home() {
           );
 
           if (!isAllowed) {
-            console.warn('تم اعتراض نافذة إعلانية غير مصرح بها:', targetUrl.origin);
-            return null; // حظر فوري لأي نطاق خارجي غير مدرج في القائمة البيضاء
+            console.warn('تم اعتراض نافذة إعلانية:', targetUrl.origin);
+            return null;
           }
         } catch (e) {
-          // إلغاء الرابط في حال كان غير صالح أو محاولة حقن غير شرعية
           return null;
         }
 
@@ -60,9 +56,7 @@ export default function Home() {
       const data = await res.json();
       const list = Array.isArray(data)
         ? data
-        : Array.isArray(data?.matches)
-        ? data.matches
-        : [];
+        : (Array.isArray(data?.matches) ? data.matches : []);
       setMatches(list);
     } catch (e) {
       console.error(e);
@@ -226,16 +220,23 @@ export default function Home() {
               ) : currentUrl ? (
                 <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                   <iframe
-  key={currentUrl}
-  src={currentUrl}
-  style={{ width: '100%', height: '100%', border: 'none' }}
-  sandbox="allow-scripts allow-same-origin allow-forms"
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-  allowFullScreen
-/>
+                    key={currentUrl}
+                    src={currentUrl}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    sandbox="allow-scripts allow-same-origin allow-forms"
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
 
-
-                  
+                  {/* زر تشغيل مباشر في المشغل الكامل */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '10px',
+                      right: '10px',
+                      zIndex: 20,
+                    }}
+                  >
                     <a
                       href={currentUrl}
                       target="_blank"
