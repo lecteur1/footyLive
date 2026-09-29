@@ -18,18 +18,11 @@ const providers = [
   new StreamedPkProvider(),
 ];
 
-// قائمة الحظر الصارم لأي مباريات فئات سنية أو دوريات مغمورة
+// حظر مباريات الفئات السنية والبيانات العشوائية
 const BANNED_PATTERNS = [
   /\bu-?17\b/i, /\bu-?18\b/i, /\bu-?19\b/i, /\bu-?20\b/i, /\bu-?21\b/i, /\bu-?23\b/i,
   /under[\s-]?17/i, /under[\s-]?18/i, /under[\s-]?19/i, /under[\s-]?20/i, /under[\s-]?21/i, /under[\s-]?23/i,
   /serie\s+[b-d]/i, /reserves?/i, /women/i, /ladies/i, /youth/i
-];
-
-// الكلمات المفتاحية لمباريات القمة والبطولات الرسمية
-const PRIORITY_KEYWORDS = [
-  'algeria', 'egypt', 'morocco', 'tunisia', 'saudi', 'iraq', 'qatar', 'kuwait', 'oman',
-  'africa cup', 'caf', 'nations league', 'gulf cup', 'world cup',
-  'spain', 'england', 'croatia', 'france', 'germany', 'italy', 'portugal', 'netherlands'
 ];
 
 export function getStreamRedirectUrl(originalUrl: string): string {
@@ -47,20 +40,40 @@ export async function getMatches(): Promise<Match[]> {
   return cache.swr('all_matches', async () => {
     const allMatchesList: any[] = [];
 
-    // 1. استدعاء المزودات بالتتابع
-    for (const provider of providers) {
-      try {
-        if (typeof (provider as any).fetchMatches === 'function') {
-          const list = await (provider as any).fetchMatches();
-          if (Array.isArray(list)) allMatchesList.push(...list);
+    // 1. المصدر الأساسي الموثوق: جدول المباريات الحقيقي
+    try {
+      const arabicProv = providers.find(p => p.id === 'arabic_fixtures') as ArabicFixturesProvider;
+      if (arabicProv) {
+        const arMatches = await arabicProv.fetchMatches();
+        if (Array.isArray(arMatches) && arMatches.length > 0) {
+          allMatchesList.push(...arMatches);
         }
-      } catch (err) {
-        logger.error(`Provider ${provider.name} failed fetching fixtures`, err);
       }
+    } catch (err) {
+      logger.error('ArabicFixtures fetch failed', err);
     }
 
-    // 2. توحيد الحقول وتنظيف النصوص
+    // 2. جلب مباريات اليوم الدولية من StreamedPk فقط (مع استبعاد CDNLive تماماً من جدول المباريات)
+    try {
+      const streamedPk = providers.find(p => p.id === 'streamed') as any;
+      if (streamedPk && typeof streamedPk.fetchMatches === 'function') {
+        const spkMatches = await streamedPk.fetchMatches();
+        if (Array.isArray(spkMatches)) {
+          // استبعاد الوديات المشبوهة أو العشوائية من StreamedPk
+          const validSpk = spkMatches.filter((m: any) => {
+            const cat = String(m.tournament || m.category || '').toLowerCase();
+            return !cat.includes('friendl') || cat.includes('fifa');
+          });
+          allMatchesList.push(...validSpk);
+        }
+      }
+    } catch (err) {
+      logger.error('StreamedPk fetchMatches failed', err);
+    }
+
+    // 3. تنظيف البيانات، منع تكرار الفرق، وإزالة المباريات الوهمية
     const seen = new Set<string>();
+    const seenTeams = new Set<string>();
     const cleanedMatches: any[] = [];
 
     for (const m of allMatchesList) {
@@ -82,18 +95,13 @@ export async function getMatches(): Promise<Match[]> {
       const tournament = String(m.tournament || m.league || 'كرة قدم').trim();
       const fullText = `${name1} ${name2} ${tournament}`;
 
-      // حظر مباريات الفئات السنية والدوريات الثانوية تماماً
-      const isBanned = BANNED_PATTERNS.some(regex => regex.test(fullText));
-      if (isBanned) continue;
+      // حظر الفئات السنية
+      if (BANNED_PATTERNS.some(regex => regex.test(fullText))) continue;
 
-      // منع التكرار
+      // منع تكرار نفس المواجهة
       const matchKey = `${name1.toLowerCase()}_vs_${name2.toLowerCase()}`;
       if (seen.has(matchKey)) continue;
       seen.add(matchKey);
-
-      // احتساب رتبة الأهمية
-      const lower = fullText.toLowerCase();
-      const isTopPriority = PRIORITY_KEYWORDS.some(k => lower.includes(k));
 
       cleanedMatches.push({
         ...m,
@@ -102,21 +110,15 @@ export async function getMatches(): Promise<Match[]> {
         homeTeam: name1,
         awayTeam: name2,
         tournament: tournament,
-        priorityRank: isTopPriority ? 1 : 2,
       });
     }
 
-    // 3. الترتيب: المباشر أولاً، ثم المباريات الكبرى، ثم حسب التوقيت
+    // 4. الترتيب: المباشر أولاً ثم حسب التوقيت
     return cleanedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
       if (aLive && !bLive) return -1;
       if (!aLive && bLive) return 1;
-
-      if (a.priorityRank !== b.priorityRank) {
-        return a.priorityRank - b.priorityRank;
-      }
-
       return (a.timestamp || 0) - (b.timestamp || 0);
     });
   }, 15);
@@ -138,6 +140,7 @@ export async function resolveAllStreams(
   const cacheKey = `streams_${matchId}`;
 
   return cache.swr(cacheKey, async () => {
+    // جميع المزودات بما فيها CDNLive تستخدم هنا حصراً لتوفير روابط البث المباشر
     const streamProviders = providers.filter(p => p.id !== 'arabic_fixtures');
     const resolveTasks = streamProviders.map(async provider => {
       try {
