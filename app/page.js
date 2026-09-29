@@ -346,16 +346,17 @@ export default function Home() {
           >
             {activeUrl ? (
               <iframe
-                ref={iframeRef}
-                key={activeUrl}
-                src={activeUrl}
-                onLoad={handleIframeLoad}
-                style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
-                allowFullScreen
-                loading="eager"
-                referrerPolicy="no-referrer"
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-              />
+  ref={iframeRef}
+  key={activeUrl}
+  src={activeUrl}
+  onLoad={handleIframeLoad}
+  style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+  allowFullScreen
+  loading="eager"
+  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+/>
+
             ) : (
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
                 جارٍ الاتصال بأسرع سيرفر...
