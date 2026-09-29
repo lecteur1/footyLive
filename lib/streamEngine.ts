@@ -1,8 +1,12 @@
 import { Match, Channel } from './types';
+import { FootballTvProvider } from './providers/footballTv';
 import { StreamedPkProvider } from './providers/streamedPk';
 import { getCacheManager } from './cache/cacheManager';
 
-const streamedProvider = new StreamedPkProvider();
+// المزود الأول: السيرفر المنقى
+const primaryProvider = new FootballTvProvider();
+// المزود الاحتياطي
+const backupProvider = new StreamedPkProvider();
 
 export function getStreamRedirectUrl(originalUrl: string): string {
   return originalUrl;
@@ -11,9 +15,17 @@ export function getStreamRedirectUrl(originalUrl: string): string {
 export async function getMatches(): Promise<Match[]> {
   const cache = getCacheManager();
   return cache.swr('engine_live_matches_clean', async () => {
+    // 1. محاولة الجلب من المزود الأول الأساسي
     try {
-      const matches = await streamedProvider.fetchMatches();
-      return matches;
+      const primaryMatches = await primaryProvider.fetchMatches();
+      if (Array.isArray(primaryMatches) && primaryMatches.length > 0) {
+        return primaryMatches;
+      }
+    } catch (e) {}
+
+    // 2. الرجوع للمزود الثاني في حال الفشل
+    try {
+      return await backupProvider.fetchMatches();
     } catch {
       return [];
     }
@@ -37,18 +49,28 @@ export async function resolveAllStreams(
   awayTeam: string,
   preFetchedMatch?: any
 ): Promise<{ url: string; proxiedUrl: string; channels: Channel[]; serverCount: number }> {
+  let channels: Channel[] = [];
+
+  // 1. فحص روابط المزود الأول الأساسي
   try {
-    const channels = await streamedProvider.resolveStreams(matchTitle, homeTeam, awayTeam, matchId, preFetchedMatch);
-    
-    if (channels && channels.length > 0) {
-      return {
-        url: channels[0].url,
-        proxiedUrl: channels[0].url,
-        channels: channels,
-        serverCount: channels.length,
-      };
-    }
+    channels = await primaryProvider.resolveStreams(matchTitle, homeTeam, awayTeam, matchId, preFetchedMatch);
   } catch (e) {}
+
+  // 2. إذا لم يعثر على سيرفرات، يتم جلب سيرفرات المزود الاحتياطي
+  if (!channels || channels.length === 0) {
+    try {
+      channels = await backupProvider.resolveStreams(matchTitle, homeTeam, awayTeam, matchId, preFetchedMatch);
+    } catch (e) {}
+  }
+
+  if (channels && channels.length > 0) {
+    return {
+      url: channels[0].url,
+      proxiedUrl: channels[0].url,
+      channels: channels,
+      serverCount: channels.length,
+    };
+  }
 
   return {
     url: '',
