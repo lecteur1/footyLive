@@ -10,7 +10,6 @@ export default function Home() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [failoverNotice, setFailoverNotice] = useState('');
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const playerContainerRef = useRef(null);
   const iframeRef = useRef(null);
@@ -18,13 +17,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchMatches();
-
-    if (typeof window !== 'undefined') {
-      // إحباط محاولات فتح النوافذ المنبثقة التلقائية
-      window.open = function () {
-        return null;
-      };
-    }
   }, []);
 
   const fetchMatches = async () => {
@@ -73,7 +65,7 @@ export default function Home() {
       setCurrentStreamIndex(0);
       playStreamAtIndex(0, availableStreams);
     } catch (e) {
-      alert('تعذر جلب السيرفرات حالياً، يرجى المحاولة لاحقاً.');
+      alert('تعذر جلب السيرفرات، يرجى المحاولة لاحقاً.');
     }
   };
 
@@ -86,7 +78,7 @@ export default function Home() {
     setCurrentStreamIndex(index);
     const target = streamsList[index];
     const streamName = target.name || `Server ${index + 1}`;
-    setFailoverNotice(`السيرفر الحالي: ${streamName}`);
+    setFailoverNotice(`السيرفر: ${streamName}`);
 
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
 
@@ -105,8 +97,8 @@ export default function Home() {
       clearTimeout(fallbackTimerRef.current);
     }
     const currentName = streams[currentStreamIndex]?.name || `Server ${currentStreamIndex + 1}`;
-    setFailoverNotice(`متصل بجودة عالية: ${currentName}`);
-    setTimeout(() => setFailoverNotice(''), 3500);
+    setFailoverNotice(`متصل الآن: ${currentName}`);
+    setTimeout(() => setFailoverNotice(''), 3000);
   };
 
   const closePlayer = () => {
@@ -116,27 +108,24 @@ export default function Home() {
     setFailoverNotice('');
   };
 
-  // تبديل وضع ملء الشاشة الحقيقي للهواتف
   const toggleFullScreen = () => {
     if (!playerContainerRef.current) return;
-
     if (!document.fullscreenElement) {
       if (playerContainerRef.current.requestFullscreen) {
         playerContainerRef.current.requestFullscreen();
       } else if (playerContainerRef.current.webkitRequestFullscreen) {
         playerContainerRef.current.webkitRequestFullscreen();
       }
-      setIsFullscreen(true);
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen();
       }
-      setIsFullscreen(false);
     }
   };
 
+  // الأولوية دائماً للرابط المحمي عبر البروكسي لقتل الإعلانات
   const currentStream = streams[currentStreamIndex];
-  const activeUrl = currentStream ? (currentStream.url || currentStream.streamUrl || currentStream.embedUrl || currentStream.proxiedUrl) : '';
+  const activeUrl = currentStream ? (currentStream.proxiedUrl || currentStream.url || currentStream.streamUrl) : '';
 
   return (
     <div style={{
@@ -153,7 +142,7 @@ export default function Home() {
       overflowX: 'hidden'
     }}>
       
-      {/* شريط الراية الوطنية */}
+      {/* شريط العلم الوطني */}
       <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #00853f 33.3%, #ffffff 33.3%, #ffffff 66.6%, #d21034 66.6%)' }}></div>
 
       {/* الشريط العلوي */}
@@ -182,7 +171,7 @@ export default function Home() {
         </button>
       </header>
 
-      {/* قائمة المباريات المباشرة */}
+      {/* قائمة المباريات */}
       <main style={{ padding: '16px', width: '100%', boxSizing: 'border-box' }}>
         {loadingMatches ? (
           <div style={{ textAlign: 'center', padding: '50px 0', color: '#6ee7b7' }}>جارٍ جلب المباريات المباشرة...</div>
@@ -287,7 +276,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* مشغل الفيديو العصري ذو الشاشة السينمائية 16:9 وتفاصيل المباراة */}
+      {/* مشغل الفيديو بنسبة 16:9 وعناصر التحكم العصرية */}
       {isPlayerOpen && (
         <div style={{
           position: 'fixed',
@@ -304,7 +293,6 @@ export default function Home() {
           overflowY: 'auto'
         }}>
           
-          {/* رأس المشغل المدمج */}
           <div style={{
             background: '#0d1510',
             padding: '12px 16px',
@@ -337,16 +325,15 @@ export default function Home() {
             </button>
           </div>
 
-          {/* حاوية الفيديو بنسبة 16:9 مع زر التكبير المدمج */}
+          {/* حاوية 16:9 بنظام التكبير التلقائي */}
           <div 
             ref={playerContainerRef}
             style={{
               width: '100%',
               aspectRatio: '16 / 9',
-              maxHeight: '40vh',
+              maxHeight: '42vh',
               background: '#000',
-              position: 'relative',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
+              position: 'relative'
             }}
           >
             {activeUrl ? (
@@ -367,14 +354,13 @@ export default function Home() {
               </div>
             )}
 
-            {/* زر تكبير الشاشة الفوري (Full Screen) */}
             <button
               onClick={toggleFullScreen}
               style={{
                 position: 'absolute',
                 bottom: '10px',
                 left: '10px',
-                background: 'rgba(0, 0, 0, 0.65)',
+                background: 'rgba(0, 0, 0, 0.75)',
                 color: '#fff',
                 border: '1px solid #00853f',
                 padding: '6px 12px',
@@ -390,17 +376,14 @@ export default function Home() {
             </button>
           </div>
 
-          {/* شريط التنبيه الذكي للسيرفر */}
           {failoverNotice && (
             <div style={{ background: '#0c2718', color: '#34d399', padding: '8px 16px', fontSize: '0.8rem', textAlign: 'center', borderBottom: '1px solid #16472b', fontWeight: 'bold' }}>
               {failoverNotice}
             </div>
           )}
 
-          {/* لوحة تحكم عصرية أسفل المشغل */}
+          {/* بطاقات السيرفرات */}
           <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            
-            {/* اختيار السيرفرات ببطاقات مميزة */}
             <div>
               <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginBottom: '8px', fontWeight: 'bold' }}>سيرفرات البث المتاحة:</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '8px' }}>
@@ -433,17 +416,15 @@ export default function Home() {
               </div>
             </div>
 
-            {/* بطاقة معلومات وتفاصيل المباراة الحالية */}
-            <div style={{ background: '#101a13', border: '1px solid #1a3021', borderRadius: '16px', padding: '14px', marginTop: '4px' }}>
+            <div style={{ background: '#101a13', border: '1px solid #1a3021', borderRadius: '16px', padding: '14px' }}>
               <div style={{ fontSize: '0.85rem', color: '#10b981', fontWeight: 'bold', marginBottom: '6px' }}>
                 🏆 {activeMatch?.tournament || 'مباراة مباشرة'}
               </div>
               <div style={{ fontSize: '0.8rem', color: '#d1d5db', lineHeight: '1.6' }}>
-                • في حال واجهت تقطيعاً، يمكنك التبديل بين السيرفرات أعلاه بنقرة واحدة.<br />
-                • اضغط على زر <b>⛶ تكبير الشاشة</b> للحصول على تجربة مشاهدة أفقية كاملة.
+                • تم دمج نظام الحماية التلقائي لمنع فتح علامات التبويب الخارجية.<br />
+                • انقر على <b>⛶ تكبير الشاشة</b> لمشاهدة المباراة بالعرض الكامل لهاتفك.
               </div>
             </div>
-
           </div>
 
         </div>
