@@ -10,7 +10,6 @@ export default function Home() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
   const [failoverNotice, setFailoverNotice] = useState('');
-  const [adShieldActive, setAdShieldActive] = useState(true);
 
   const playerContainerRef = useRef(null);
   const iframeRef = useRef(null);
@@ -20,6 +19,7 @@ export default function Home() {
     fetchMatches();
 
     if (typeof window !== 'undefined') {
+      // حظر فتح النوافذ المنبثقة
       window.open = function () {
         return null;
       };
@@ -68,7 +68,6 @@ export default function Home() {
 
       setActiveMatch(match);
       setIsPlayerOpen(true);
-      setAdShieldActive(true);
       setStreams(availableStreams);
       setCurrentStreamIndex(0);
       playStreamAtIndex(0, availableStreams);
@@ -84,30 +83,30 @@ export default function Home() {
     }
 
     setCurrentStreamIndex(index);
-    setAdShieldActive(true);
     const target = streamsList[index];
     const streamName = target.name || `Server ${index + 1}`;
-    setFailoverNotice(`السيرفر: ${streamName}`);
+    setFailoverNotice(`يعمل الآن: ${streamName} (جاري التحقق من البث...)`);
 
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
 
+    // إذا لم يشتغل السيرفر أو ظهر فيه خطأ، ينتقل تلقائياً للسيرفر التالي بعد 7 ثوانٍ
     fallbackTimerRef.current = setTimeout(() => {
       if (index + 1 < streamsList.length) {
         const nextIndex = index + 1;
         const nextName = streamsList[nextIndex].name || `Server ${nextIndex + 1}`;
-        setFailoverNotice(`السيرفر بطيء، الانتقال التلقائي إلى ${nextName}...`);
+        setFailoverNotice(`السيرفر لم يستجب، جارٍ الانتقال تلقائياً إلى ${nextName}...`);
         playStreamAtIndex(nextIndex, streamsList);
+      } else {
+        setFailoverNotice(`السيرفر الحالي: ${streamName}`);
       }
-    }, 8000);
+    }, 7000);
   };
 
   const handleIframeLoad = () => {
-    if (fallbackTimerRef.current) {
-      clearTimeout(fallbackTimerRef.current);
-    }
     const currentName = streams[currentStreamIndex]?.name || `Server ${currentStreamIndex + 1}`;
-    setFailoverNotice(`متصل الآن: ${currentName}`);
-    setTimeout(() => setFailoverNotice(''), 3000);
+    setTimeout(() => {
+      setFailoverNotice(`متصل الآن بـ: ${currentName}`);
+    }, 1500);
   };
 
   const closePlayer = () => {
@@ -284,7 +283,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* مشغل الفيديو المزود بدرع حماية اللمس */}
+      {/* مشغل الفيديو بدون أي وسم sandbox نهائياً */}
       {isPlayerOpen && (
         <div style={{
           position: 'fixed',
@@ -333,7 +332,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* حاوية الفيديو مع درع امتصاص أول نقرة */}
+          {/* حاوية 16:9 بنظام التكبير التلقائي */}
           <div 
             ref={playerContainerRef}
             style={{
@@ -346,38 +345,20 @@ export default function Home() {
           >
             {activeUrl ? (
               <iframe
-  ref={iframeRef}
-  key={activeUrl}
-  src={activeUrl}
-  onLoad={handleIframeLoad}
-  style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
-  allowFullScreen
-  loading="eager"
-  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-/>
-
+                ref={iframeRef}
+                key={activeUrl}
+                src={activeUrl}
+                onLoad={handleIframeLoad}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+                allowFullScreen
+                loading="eager"
+                referrerPolicy="no-referrer"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              />
             ) : (
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
                 جارٍ الاتصال بأسرع سيرفر...
               </div>
-            )}
-
-            {/* درع اللمس الشفاف: يمتص النقرة الأولى لمنع التبويب الإعلاني ثم يختفي */}
-            {adShieldActive && (
-              <div
-                onClick={() => setAdShieldActive(false)}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  background: 'transparent',
-                  zIndex: 5,
-                  cursor: 'pointer'
-                }}
-              />
             )}
 
             <button
@@ -447,8 +428,8 @@ export default function Home() {
                 🏆 {activeMatch?.tournament || 'مباراة مباشرة'}
               </div>
               <div style={{ fontSize: '0.8rem', color: '#d1d5db', lineHeight: '1.6' }}>
-                • انقر مرة واحدة داخل مربع الفيديو لبدء التشغيل مع امتصاص النوافذ الإعلانية.<br />
-                • استخدم زر <b>⛶ تكبير الشاشة</b> للحصول على عرض أفقي كامل.
+                • في حال لم يبدأ السيرفر الأول، سيقوم النظام بالانتقال التلقائي إلى السيرفر الثاني خلال ثوانٍ.<br />
+                • انقر على <b>⛶ تكبير الشاشة</b> للحصول على عرض أفقي كامل.
               </div>
             </div>
           </div>
