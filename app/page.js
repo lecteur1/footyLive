@@ -16,13 +16,12 @@ export default function Home() {
   useEffect(() => {
     fetchMatches();
 
-    // حظر النوافذ المنبثقة والروابط الإعلانية داخل المتصفح وتطبيق APK
+    // حظر محاولات التوجيه الخبيثة والإعلانات المعروفة
     if (typeof window !== 'undefined') {
       const originalOpen = window.open;
       window.open = function (url, target, features) {
         if (!url || typeof url !== 'string') return null;
-        
-        // قائمة النطاقات الإعلانية المكتشفة في البث
+
         const blockedKeywords = [
           'ay267',
           'budgetezy',
@@ -39,7 +38,7 @@ export default function Home() {
 
         const isAd = blockedKeywords.some((domain) => url.toLowerCase().includes(domain));
         if (isAd) {
-          console.warn('Ad popup blocked by Saifou Sat Shield:', url);
+          console.warn('Ad popup blocked:', url);
           return null;
         }
 
@@ -215,15 +214,46 @@ export default function Home() {
                   جاري جلب وتشغيل البث المباشر...
                 </div>
               ) : currentUrl ? (
-                <iframe
-  key={currentUrl}
-  src={currentUrl}
-  style={{ width: '100%', height: '100%', border: 'none' }}
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture; cross-origin-isolated"
-  allowFullScreen
-/>
-
-
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  <iframe
+                    key={currentUrl}
+                    src={currentUrl}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
+                  {/* زر تشغيل فوري لتجاوز قيود الـ WebView المسببة للرسالة الحمراء */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '10px',
+                      right: '10px',
+                      zIndex: 20,
+                    }}
+                  >
+                    <a
+                      href={currentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        backgroundColor: '#00853f',
+                        color: '#fff',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        textDecoration: 'none',
+                        fontWeight: 'bold',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <span>تشغيل مباشر في المشغل الكامل</span>
+                      <span>▶</span>
+                    </a>
+                  </div>
+                </div>
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
                   لا يوجد بث مباشر متاح حالياً لهذه المباراة.
