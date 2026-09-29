@@ -18,7 +18,7 @@ const providers = [
 
 export function getStreamRedirectUrl(originalUrl: string): string {
   const encoded = Buffer.from(originalUrl).toString('base64url');
-  const expires = Date.now() + 4 * 60 * 60 * 1000; // 4 hours expiration
+  const expires = Date.now() + 4 * 60 * 60 * 1000;
   const signature = crypto
     .createHmac('sha256', SECRET_KEY)
     .update(`${encoded}:${expires}`)
@@ -31,7 +31,14 @@ export async function getMatches(): Promise<Match[]> {
   return cache.swr('all_matches', async () => {
     const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
     if (!watchFooty) return [];
-    return watchFooty.fetchMatches();
+    
+    const matches = await watchFooty.fetchMatches();
+    // ترتيب المباريات: المباشرة أولاً ثم حسب الأهمية والتوقيت
+    return matches.sort((a, b) => {
+      if (a.status === 'live' && b.status !== 'live') return -1;
+      if (b.status === 'live' && a.status !== 'live') return 1;
+      return a.timestamp - b.timestamp;
+    });
   }, 15);
 }
 
@@ -64,13 +71,13 @@ export async function resolveAllStreams(
     const allServers: Channel[] = [];
 
     for (const r of results) {
-      if (r.status === 'fulfilled') {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
         allServers.push(...r.value);
       }
     }
 
     if (allServers.length === 0) {
-      throw new Error('No streams available from any provider');
+      throw new Error('No streams available for this match');
     }
 
     const qualityOrder: Record<string, number> = { 'FHD': 0, 'HD': 0, '1080p': 0, '720p': 1, 'SD': 2 };
