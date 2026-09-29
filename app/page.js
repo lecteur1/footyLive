@@ -333,7 +333,7 @@ export default function Home() {
             }}
           >
             {activeUrl ? (
-              <<iframe
+              <iframe
   ref={iframeRef}
   key={activeUrl}
   src={activeUrl}
@@ -344,6 +344,7 @@ export default function Home() {
   sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
   allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
 />
+
 
             ) : (
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
