@@ -29,15 +29,73 @@ export function getStreamRedirectUrl(originalUrl: string): string {
 export async function getMatches(): Promise<Match[]> {
   const cache = getCacheManager();
   return cache.swr('all_matches', async () => {
-    const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
-    if (!watchFooty) return [];
-    
-    const matches = await watchFooty.fetchMatches();
-    // ترتيب المباريات: المباشرة أولاً ثم حسب الأهمية والتوقيت
-    return matches.sort((a, b) => {
-      if (a.status === 'live' && b.status !== 'live') return -1;
-      if (b.status === 'live' && a.status !== 'live') return 1;
-      return a.timestamp - b.timestamp;
+    const allMatchesList: any[] = [];
+
+    // 1. جلب المباريات من WatchFooty
+    try {
+      const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
+      if (watchFooty && typeof watchFooty.fetchMatches === 'function') {
+        const wfMatches = await watchFooty.fetchMatches();
+        if (Array.isArray(wfMatches)) allMatchesList.push(...wfMatches);
+      }
+    } catch (err) {
+      logger.error('WatchFooty fetchMatches failed', err);
+    }
+
+    // 2. جلب المباريات من StreamedPk (جدول اليوم الكامل)
+    try {
+      const streamedPk = providers.find(p => p.id === 'streamedpk') as any;
+      if (streamedPk && typeof streamedPk.fetchMatches === 'function') {
+        const spkMatches = await streamedPk.fetchMatches();
+        if (Array.isArray(spkMatches)) allMatchesList.push(...spkMatches);
+      }
+    } catch (err) {
+      logger.error('StreamedPk fetchMatches failed', err);
+    }
+
+    // 3. توحيد أسماء الفرق واستخراجها في حال كانت داخل العنوان أو في حقول مختلفة
+    const seen = new Set<string>();
+    const normalizedMatches = allMatchesList
+      .map((m: any) => {
+        let t1 = m.team1 || m.homeTeam || m.home || '';
+        let t2 = m.team2 || m.awayTeam || m.away || '';
+
+        // استخراج الأسماء من العنوان إذا كانت مدمجة (Title: Team A vs Team B)
+        if ((!t1 || !t2) && m.title) {
+          const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
+          if (parts.length >= 2) {
+            t1 = t1 || parts[0].trim();
+            t2 = t2 || parts[1].trim();
+          }
+        }
+
+        t1 = t1 || 'الفريق 1';
+        t2 = t2 || 'الفريق 2';
+
+        return {
+          ...m,
+          team1: t1,
+          team2: t2,
+          homeTeam: t1,
+          awayTeam: t2,
+          tournament: m.tournament || m.league || m.category || 'مباراة مباشرة',
+        };
+      })
+      .filter((m: any) => {
+        // فلترة التكرار بين المزودين
+        const key = `${m.team1.trim().toLowerCase()}_vs_${m.team2.trim().toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+    // 4. ترتيب المباريات: المباشرة أولاً ثم حسب التوقيت
+    return normalizedMatches.sort((a: any, b: any) => {
+      const aLive = a.status === 'live' || a.isLive;
+      const bLive = b.status === 'live' || b.isLive;
+      if (aLive && !bLive) return -1;
+      if (!aLive && bLive) return 1;
+      return (a.timestamp || 0) - (b.timestamp || 0);
     });
   }, 15);
 }
