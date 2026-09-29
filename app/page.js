@@ -10,8 +10,10 @@ export default function Home() {
   const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
+  const [directHlsUrl, setDirectHlsUrl] = useState('');
 
   const playerContainerRef = useRef(null);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     fetchMatches();
@@ -46,11 +48,27 @@ export default function Home() {
     return '00:00';
   };
 
+  const extractDirectStream = async (url) => {
+    if (!url) return;
+    try {
+      const extRes = await fetch(`/api/extractor?url=${encodeURIComponent(url)}`);
+      const extData = await extRes.json();
+      if (extData?.success && extData.type === 'hls' && extData.streamUrl) {
+        setDirectHlsUrl(extData.streamUrl);
+      } else {
+        setDirectHlsUrl('');
+      }
+    } catch (e) {
+      setDirectHlsUrl('');
+    }
+  };
+
   const handleOpenMatch = async (match) => {
     setActiveMatch(match);
     setIsPlayerOpen(true);
     setLoadingStream(true);
     setStreams([]);
+    setDirectHlsUrl('');
     setCurrentStreamIndex(0);
 
     try {
@@ -67,11 +85,23 @@ export default function Home() {
       }
 
       setStreams(streamList);
+
+      if (streamList[0]?.url) {
+        extractDirectStream(streamList[0].url);
+      }
     } catch (err) {
       console.error('Failed to load streams', err);
       setStreams([]);
     } finally {
       setLoadingStream(false);
+    }
+  };
+
+  const handleServerSwitch = (index) => {
+    setCurrentStreamIndex(index);
+    setDirectHlsUrl('');
+    if (streams[index]?.url) {
+      extractDirectStream(streams[index].url);
     }
   };
 
@@ -183,20 +213,29 @@ export default function Home() {
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66', fontSize: '14px' }}>
                   جاري جلب وتشغيل البث المباشر...
                 </div>
+              ) : directHlsUrl ? (
+                /* مشغل الفيديو الأصلي النظيف بدون إعلانات نهائياً */
+                <video
+                  ref={videoRef}
+                  src={directHlsUrl}
+                  controls
+                  autoPlay
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
               ) : currentUrl ? (
+                /* المشغل التضميني المباشر النظيف بدون sandbox لتفادي حظر المشغل */
                 <iframe
-  key={currentUrl}
-  src={currentUrl}
-  style={{ width: '100%', height: '100%', border: 'none' }}
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-  allowFullScreen
-  sandbox="allow-scripts allow-same-origin allow-presentation"
-/>
-
-
+                  key={currentUrl}
+                  src={currentUrl}
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  referrerPolicy="no-referrer"
+                />
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
-                  لا يوجد بث مباشر متاح حالياً لهذه المباراة (قد تكون لم تبدأ بعد أو انتهت).
+                  لا يوجد بث مباشر متاح حالياً لهذه المباراة.
                 </div>
               )}
             </div>
@@ -217,7 +256,11 @@ export default function Home() {
                 ⛶ تكبير الشاشة
               </button>
 
-              {currentUrl && (
+              {directHlsUrl ? (
+                <span style={{ fontSize: '12px', color: '#00cc66', fontWeight: 'bold' }}>
+                  ● بث مباشر نقي (HLS)
+                </span>
+              ) : currentUrl ? (
                 <a
                   href={currentUrl}
                   target="_blank"
@@ -234,10 +277,10 @@ export default function Home() {
                   <span>فتح في نافذة مستقلة</span>
                   <span>↗</span>
                 </a>
-              )}
+              ) : null}
             </div>
 
-            {/* أزرار السيرفرات الحقيقية فقط */}
+            {/* أزرار السيرفرات */}
             {streams.length > 1 && (
               <div style={{ marginTop: '14px' }}>
                 <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>اختر سيرفر البث:</div>
@@ -245,7 +288,7 @@ export default function Home() {
                   {streams.map((s, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setCurrentStreamIndex(idx)}
+                      onClick={() => handleServerSwitch(idx)}
                       style={{
                         flex: 1,
                         minWidth: '100px',
