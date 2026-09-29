@@ -18,24 +18,16 @@ export default function Home() {
 
     if (typeof window !== 'undefined') {
       const originalOpen = window.open;
-      const allowedHosts = [
-        window.location.hostname,
-        'embed.st',
-      ];
 
+      // السماح لنطاق التطبيق فقط بمنع النوافذ الإعلانية الصادرة من أي سيرفر خارجي
       window.open = function (url, target, features) {
         if (!url || typeof url !== 'string') return null;
 
         try {
           const targetUrl = new URL(url, window.location.href);
-          const isAllowed = allowedHosts.some(
-            (allowed) =>
-              targetUrl.hostname === allowed ||
-              targetUrl.hostname.endsWith('.' + allowed)
-          );
-
-          if (!isAllowed) {
-            console.warn('Ad blocked:', targetUrl.origin);
+          // حظر أي نافذة تتجه إلى نطاق مختلف عن نطاق التطبيق الحالي
+          if (targetUrl.hostname !== window.location.hostname) {
+            console.warn('Blocked popup redirection:', targetUrl.origin);
             return null;
           }
         } catch (e) {
@@ -44,8 +36,22 @@ export default function Home() {
 
         return originalOpen.call(window, url, target, features);
       };
+
+      // اعتراض محاولات الإعلانات لتغيير مسار الصفحة بالكامل
+      const handleBeforeUnload = (e) => {
+        if (isPlayerOpen) {
+          // تثبيت المستخدم داخل التطبيق عند محاولة إعلان سحبه لصفحة خارجية
+          e.preventDefault();
+          return '';
+        }
+      };
+
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      };
     }
-  }, []);
+  }, [isPlayerOpen]);
 
   const fetchMatches = async () => {
     setLoadingMatches(true);
