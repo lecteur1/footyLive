@@ -16,11 +16,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchMatches();
-
-    if (typeof window !== 'undefined') {
-      // إحباط فتح النوافذ المنبثقة من جذورها على مستوى الصفحة الأم
-      window.open = function () { return null; };
-    }
   }, []);
 
   const fetchMatches = async () => {
@@ -53,14 +48,14 @@ export default function Home() {
   };
 
   const handleWatchMatch = async (match) => {
-    setStatusNotice('جارٍ جلب السيرفرات المتاحة...');
+    setStatusNotice('جارٍ الاتصال بالسيرفرات...');
     try {
       const res = await fetch(`/api/streams/${match.id}`);
       const data = await res.json();
       const availableStreams = data.streams || [];
 
       if (!availableStreams || availableStreams.length === 0) {
-        alert('عذراً، البث المباشر لهذه المباراة غير متوفر حالياً.');
+        alert('البث المباشر لهذه المباراة غير متوفر حالياً.');
         return;
       }
 
@@ -70,20 +65,15 @@ export default function Home() {
       setCurrentStreamIndex(0);
       playStreamAtIndex(0, availableStreams);
     } catch (e) {
-      alert('تعذر جلب السيرفرات حالياً، يرجى إعادة المحاولة.');
+      alert('تعذر جلب السيرفرات حالياً، يرجى المحاولة لاحقاً.');
     }
   };
 
   const playStreamAtIndex = (index, streamsList = streams) => {
-    if (!streamsList || streamsList.length === 0 || index >= streamsList.length) {
-      setStatusNotice('اختر أحد السيرفرات المتاحة.');
-      return;
-    }
-
+    if (!streamsList || streamsList.length === 0 || index >= streamsList.length) return;
     setCurrentStreamIndex(index);
     const target = streamsList[index];
     const streamName = target.name || `Server ${index + 1}`;
-    
     setStatusNotice(`متصل الآن بـ: ${streamName} (انقر على زر التشغيل)`);
   };
 
@@ -108,9 +98,8 @@ export default function Home() {
     }
   };
 
-  // الأولوية لرابط البروكسي المحمي، ثم الرابط المباشر
   const currentStream = streams[currentStreamIndex];
-  const activeUrl = currentStream ? (currentStream.proxiedUrl || currentStream.url || currentStream.streamUrl) : '';
+  const activeUrl = currentStream ? (currentStream.proxiedUrl || currentStream.url) : '';
 
   return (
     <div style={{
@@ -166,7 +155,7 @@ export default function Home() {
           </div>
         ) : matches.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af', background: '#111e15', borderRadius: '16px', border: '1px dashed #1c3523' }}>
-            لا توجد مباريات جارية أو مهمة حالياً.
+            لا توجد مباريات جارية حالياً.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
@@ -189,8 +178,7 @@ export default function Home() {
                     width: '100%',
                     boxSizing: 'border-box',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                    position: 'relative',
-                    transition: 'transform 0.2s ease',
+                    position: 'relative'
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -224,7 +212,7 @@ export default function Home() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 8px' }}>
                       {isLive ? (
                         <>
-                          <div style={{ background: '#040805', border: '2px solid #00853f', borderRadius: '14px', padding: '8px 20px', boxShadow: '0 4px 12px rgba(0, 133, 63, 0.2)' }}>
+                          <div style={{ background: '#040805', border: '2px solid #00853f', borderRadius: '14px', padding: '8px 20px' }}>
                             <span style={{ fontSize: '1.6rem', fontWeight: '900', color: '#fff', letterSpacing: '3px' }}>
                               {m.homeScore ?? 0} : {m.awayScore ?? 0}
                             </span>
@@ -259,7 +247,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <button style={{ width: '100%', marginTop: '20px', background: 'linear-gradient(90deg, #00853f 0%, #005a2b 100%)', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                  <button style={{ width: '100%', marginTop: '20px', background: 'linear-gradient(90deg, #00853f 0%, #005a2b 100%)', color: '#fff', border: 'none', padding: '14px', borderRadius: '12px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer' }}>
                     {isLive ? 'مشاهدة البث المباشر' : 'تفاصيل المباراة والسيرفرات'}
                   </button>
                 </div>
@@ -269,7 +257,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* مشغل الفيديو العصري ذو الشاشة السينمائية */}
+      {/* مشغل الفيديو بدون أي sandbox */}
       {isPlayerOpen && (
         <div style={{
           position: 'fixed',
@@ -286,7 +274,6 @@ export default function Home() {
           overflowY: 'auto'
         }}>
           
-          {/* شريط المشغل العلوي */}
           <div style={{
             background: '#0d1510',
             padding: '14px 16px',
@@ -312,15 +299,13 @@ export default function Home() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(210, 16, 52, 0.4)'
+                cursor: 'pointer'
               }}
             >
               ✕
             </button>
           </div>
 
-          {/* حاوية الفيديو */}
           <div 
             ref={playerContainerRef}
             style={{
@@ -328,24 +313,20 @@ export default function Home() {
               aspectRatio: '16 / 9',
               maxHeight: '45vh',
               background: '#000',
-              position: 'relative',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
+              position: 'relative'
             }}
           >
             {activeUrl ? (
               <iframe
-  ref={iframeRef}
-  key={activeUrl}
-  src={activeUrl}
-  style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
-  allowFullScreen
-  loading="eager"
-  referrerPolicy="no-referrer-when-downgrade"
-  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-/>
-
-
+                ref={iframeRef}
+                key={activeUrl}
+                src={activeUrl}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#000' }}
+                allowFullScreen
+                loading="eager"
+                referrerPolicy="no-referrer"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              />
             ) : (
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
                 جارٍ الاتصال بالسيرفر...
@@ -373,20 +354,17 @@ export default function Home() {
                 gap: '6px'
               }}
             >
-              <span style={{ fontSize: '1.1rem' }}>⛶</span> تكبير الشاشة
+              ⛶ تكبير الشاشة
             </button>
           </div>
 
-          {/* شريط حالة السيرفر */}
           {statusNotice && (
             <div style={{ background: '#0c2718', color: '#34d399', padding: '10px 16px', fontSize: '0.85rem', textAlign: 'center', borderBottom: '1px solid #16472b', fontWeight: 'bold' }}>
               {statusNotice}
             </div>
           )}
 
-          {/* عناصر التحكم واختيار السيرفرات */}
           <div style={{ padding: '20px 16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
             <div>
               <div style={{ fontSize: '0.9rem', color: '#9ca3af', marginBottom: '12px', fontWeight: 'bold' }}>اختر سيرفر البث (في حال التقطيع):</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '10px' }}>
@@ -407,9 +385,7 @@ export default function Home() {
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all 0.2s ease',
-                      boxShadow: currentStreamIndex === idx ? '0 4px 12px rgba(0, 133, 63, 0.3)' : 'none'
+                      gap: '6px'
                     }}
                   >
                     <span>{s.name || `سيرفر ${idx + 1}`}</span>
@@ -423,16 +399,14 @@ export default function Home() {
 
             <div style={{ background: '#101a13', border: '1px solid #1a3021', borderRadius: '16px', padding: '16px' }}>
               <div style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 'bold', marginBottom: '8px' }}>
-                🏆 {activeMatch?.tournament || 'دوري غير محدد'}
+                🏆 {activeMatch?.tournament || 'مباراة مباشرة'}
               </div>
               <ul style={{ margin: 0, padding: '0 20px', fontSize: '0.85rem', color: '#d1d5db', lineHeight: '1.8' }}>
                 <li>انقر على زر <b>التشغيل (Play)</b> داخل مربع الفيديو لبدء البث.</li>
-                
-                <li>للحصول على تجربة مشاهدة أفقية كاملة، استخدم زر <b>⛶ تكبير الشاشة</b>.</li>
+                <li>استخدم زر <b>⛶ تكبير الشاشة</b> للحصول على عرض أفقي كامل.</li>
                 <li>إذا توقف البث أو كان بطيئاً، قم باختيار سيرفر آخر من القائمة أعلاه.</li>
               </ul>
             </div>
-
           </div>
 
         </div>
