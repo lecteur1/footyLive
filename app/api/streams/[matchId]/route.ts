@@ -10,36 +10,34 @@ export async function GET(
   const { matchId } = await params;
   const decodedId = decodeURIComponent(matchId).toLowerCase();
 
-  // رابط البث المباشر الفعال
-  let streamUrl = 'https://topembed.pw/channel/beIN_Sports_2_HD';
-  if (decodedId.includes('egypt') || decodedId.includes('مصر') || decodedId.includes('sudan')) {
-    streamUrl = 'https://topembed.pw/channel/beIN_Sports_1_HD';
-  }
-
-  const streamsList = [
+  // روابط بث HLS ومفتوحة تقبل التشغيل المباشر داخل المشغلات دون حظر iframe
+  const streams = [
     {
-      name: 'Server 1 (Live HD)',
-      url: streamUrl,
-      proxiedUrl: streamUrl,
-      quality: 'HD',
+      name: 'Server 1 (Direct Stream HD)',
+      url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      proxiedUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+      quality: '1080p',
     },
     {
-      name: 'Server 2 (Backup CDN)',
+      name: 'Server 2 (Backup Web Player)',
       url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
       proxiedUrl: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-      quality: 'SD',
+      quality: '720p',
     }
   ];
 
   return NextResponse.json({
     matchTitle: decodedId.replace(/[-_]/g, ' '),
     matchStatus: 'live',
-    streams: streamsList,
-    channels: streamsList,
-    defaultUrl: streamsList[0].url,
-    proxiedUrl: streamsList[0].url,
-    isDirectHls: false,
+    streams: streams,
+    channels: streams,
+    defaultUrl: streams[0].url,
+    proxiedUrl: streams[0].proxiedUrl,
+    isDirectHls: true, // إجبار المشغل على استخدام مشغل HLS/Video الأصلي فوراً وتخطي زر الحماية
   }, {
-    headers: { 'Cache-Control': 'no-store, max-age=0' }
+    headers: {
+      'Cache-Control': 'no-store, max-age=0',
+      'Content-Type': 'application/json',
+    }
   });
 }
