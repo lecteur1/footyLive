@@ -3,24 +3,32 @@ import './globals.css';
 export const metadata = {
   title: 'Saifou Sat | سيفو سات للبث المباشر',
   description: 'بث مباشر للمباريات بجودة عالية وبدون تقطيع على سيفو سات.',
+  applicationName: 'Saifou Sat',
+  appleWebApp: {
+    capable: true,
+    title: 'Saifou Sat',
+    statusBarStyle: 'black-translucent',
+  },
   icons: {
-    icon: '/favicon.ico',
+    icon: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>',
+    apple: 'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📡</text></svg>',
   },
 };
-
 
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: '#00853f',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className="dark" style={{ background: '#090e0b', colorScheme: 'dark' }}>
       <head>
-        <meta name="theme-color" content="#00853f" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body
         style={{
@@ -33,6 +41,7 @@ export default function RootLayout({ children }) {
           overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
+          WebkitTapHighlightColor: 'transparent',
         }}
       >
         <main style={{ width: '100%', flex: 1, margin: 0, padding: 0 }}>
