@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getMatches, resolveAllStreams } from '@/lib/streamEngine';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -8,36 +9,32 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   const { matchId } = await params;
-  const decodedId = decodeURIComponent(matchId).toLowerCase();
 
-  // روابط بث HLS ومفتوحة تقبل التشغيل المباشر داخل المشغلات دون حظر iframe
-  const streams = [
-    {
-      name: 'Server 1 (Direct Stream HD)',
-      url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-      proxiedUrl: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
-      quality: '1080p',
-    },
-    {
-      name: 'Server 2 (Backup Web Player)',
-      url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-      proxiedUrl: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-      quality: '720p',
-    }
-  ];
+  try {
+    const allMatches = await getMatches().catch(() => []);
+    const match = allMatches.find(m => String(m.id) === String(matchId)) || null;
 
-  return NextResponse.json({
-    matchTitle: decodedId.replace(/[-_]/g, ' '),
-    matchStatus: 'live',
-    streams: streams,
-    channels: streams,
-    defaultUrl: streams[0].url,
-    proxiedUrl: streams[0].proxiedUrl,
-    isDirectHls: true, // إجبار المشغل على استخدام مشغل HLS/Video الأصلي فوراً وتخطي زر الحماية
-  }, {
-    headers: {
-      'Cache-Control': 'no-store, max-age=0',
-      'Content-Type': 'application/json',
-    }
-  });
+    const title = match?.title || decodeURIComponent(matchId);
+    const homeTeam = (typeof match?.homeTeam === 'object' ? (match.homeTeam as any)?.name : match?.homeTeam) || match?.team1 || '';
+    const awayTeam = (typeof match?.awayTeam === 'object' ? (match.awayTeam as any)?.name : match?.awayTeam) || match?.team2 || '';
+
+    const resolved = await resolveAllStreams(title, matchId, String(homeTeam), String(awayTeam), match);
+
+    return NextResponse.json({
+      matchTitle: title,
+      matchStatus: match?.status || 'live',
+      streams: resolved.channels || [],
+      defaultUrl: resolved.url || (resolved.channels && resolved.channels[0]?.url) || '',
+      isDirectHls: false,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      }
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: 'Failed to resolve stream routes: ' + err.message },
+      { status: 500 }
+    );
+  }
 }
