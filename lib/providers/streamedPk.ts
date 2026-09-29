@@ -1,14 +1,13 @@
 import { Match, Channel } from '../types';
 import { StreamProvider } from './types';
 import { fetchWithTimeout } from './baseProvider';
-import { teamsMatch } from '../utils/matching';
 import { getCacheManager } from '../cache/cacheManager';
 import logger from '../logger';
 
 const STREAMED_API = 'https://streamed.pk/api/matches/football';
 const STREAMED_STREAM = 'https://streamed.pk/api/stream';
-const TIMEOUT_MS = 5000;
-const SHORT_TIMEOUT = 3000;
+const TIMEOUT_MS = 6000;
+const SHORT_TIMEOUT = 4000;
 
 interface StreamedRawMatch {
   id: string;
@@ -16,8 +15,8 @@ interface StreamedRawMatch {
   category: string;
   date: number;
   teams?: {
-    home?: { name: string };
-    away?: { name: string };
+    home?: { name: string; badge?: string };
+    away?: { name: string; badge?: string };
   };
   sources?: { source: string; id: string }[];
 }
@@ -28,7 +27,7 @@ export class StreamedPkProvider implements StreamProvider {
 
   private async fetchRawMatches(): Promise<StreamedRawMatch[]> {
     const cache = getCacheManager();
-    return cache.swr('streamed_raw', async () => {
+    return cache.swr('streamed_raw_v5', async () => {
       try {
         const data = await fetchWithTimeout(STREAMED_API, TIMEOUT_MS);
         return Array.isArray(data) ? data : [];
@@ -36,47 +35,44 @@ export class StreamedPkProvider implements StreamProvider {
         logger.error('Streamed.pk API request failed', err);
         return [];
       }
-    }, 30);
+    }, 20);
   }
 
-  // تفعيل الدالة لسحب كل مباريات اليوم بدلاً من إرجاع مصفوفة فارغة
+  // تفعيل جلب المباريات ليغذي الواجهة بجدول المباريات الحقيقي والحي
   async fetchMatches(): Promise<Match[]> {
     try {
       const raw = await this.fetchRawMatches();
       const now = Date.now();
 
-      return raw.map((m: StreamedRawMatch) => {
-        let home = m.teams?.home?.name || '';
-        let away = m.teams?.away?.name || '';
-
-        if ((!home || !away) && m.title) {
-          const parts = m.title.split(/\s+(?:vs\.?|-)\s+/i);
-          if (parts.length >= 2) {
-            home = home || parts[0].trim();
-            away = away || parts[1].trim();
-          }
-        }
-
-        const matchTime = m.date || now;
-        // تعتبر المباراة جارية إذا كان وقتها الآن أو مر عليها أقل من ساعتين
-        const isLive = matchTime <= now && (now - matchTime) < 130 * 60 * 1000;
+      return raw.map(m => {
+        const homeName = m.teams?.home?.name || m.title.split(/vs\.?|-/i)[0]?.trim() || 'Home';
+        const awayName = m.teams?.away?.name || m.title.split(/vs\.?|-/i)[1]?.trim() || 'Away';
+        const kickoff = m.date ? Number(m.date) : now;
+        const diffMinutes = Math.floor((now - kickoff) / 60000);
+        const isLive = diffMinutes >= 0 && diffMinutes < 130;
 
         return {
-          id: m.id || `${home}-vs-${away}`,
-          title: m.title || `${home} vs ${away}`,
-          team1: home || 'الفريق 1',
-          team2: away || 'الفريق 2',
-          homeTeam: home || 'الفريق 1',
-          awayTeam: away || 'الفريق 2',
-          tournament: m.category || 'كرة قدم',
+          id: String(m.id),
+          title: m.title || `${homeName} vs ${awayName}`,
+          sport: 'football',
           status: isLive ? 'live' : 'upcoming',
-          timestamp: matchTime,
-          time: new Date(matchTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          hasStreams: (m.sources && m.sources.length > 0) || false,
-        } as Match;
+          timestamp: kickoff,
+          tournament: m.category || 'World Football',
+          homeTeam: { name: homeName, badge: m.teams?.home?.badge || '' },
+          awayTeam: { name: awayName, badge: m.teams?.away?.badge || '' },
+          team1: homeName,
+          team2: awayName,
+          time: new Date(kickoff).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          hasStreams: Array.isArray(m.sources) && m.sources.length > 0,
+          sources: (m.sources || []).map((s, idx) => ({
+            source: s.source,
+            id: s.id,
+            label: `Server ${idx + 1}`,
+          })),
+        } as unknown as Match;
       });
     } catch (err) {
-      logger.error('Streamed.pk fetchMatches conversion failed', err);
+      logger.error('StreamedPk fetchMatches failed', err);
       return [];
     }
   }
@@ -85,15 +81,16 @@ export class StreamedPkProvider implements StreamProvider {
     try {
       const url = `${STREAMED_STREAM}/${source}/${id}`;
       const data = await fetchWithTimeout(url, SHORT_TIMEOUT);
+      
       if (Array.isArray(data) && data.length > 0) {
         return data.map((s: any) => ({
-          url: s.embedUrl || s.url || '',
-          quality: s.hd ? 'HD' : 'SD',
+          url: s.embedUrl || s.url || s.streamUrl || s.iframe || '',
+          quality: s.hd ? '1080p' : '720p',
         }));
       }
       if (data?.url || data?.embedUrl || data?.streamUrl || data?.iframe) {
         return [{
-          url: data.url || data.embedUrl || data.streamUrl || data.iframe,
+          url: data.embedUrl || data.url || data.streamUrl || data.iframe,
           quality: 'HD',
         }];
       }
@@ -112,32 +109,31 @@ export class StreamedPkProvider implements StreamProvider {
   ): Promise<Channel[]> {
     try {
       const matches = await this.fetchRawMatches();
+      // البحث عن المباراة عبر المعرف ID أولاً أو تطابق الأسماء
+      const matched = matches.find(m => String(m.id) === String(matchId)) ||
+                      matches.find(m => m.title.toLowerCase().includes(homeTeam.toLowerCase()) || 
+                                        m.title.toLowerCase().includes(awayTeam.toLowerCase()));
+
       const channels: Channel[] = [];
-      const streamTasks: Promise<{ urls: { url: string; quality: string }[]; source: any }>[] = [];
-      
-      for (const m of matches) {
-        if (teamsMatch(matchTitle, m.title)) {
-          const sources = m.sources || [];
-          for (const src of sources) {
-            streamTasks.push(
-              this.resolveStreamedStream(src.source, src.id)
-                .then(urls => ({ urls, source: src }))
-                .catch(() => ({ urls: [], source: src }))
-            );
-          }
-        }
-      }
-      
+      const sources = matched?.sources || [];
+
+      const streamTasks = sources.map(src =>
+        this.resolveStreamedStream(src.source, src.id)
+          .then(urls => ({ urls, source: src }))
+          .catch(() => ({ urls: [], source: src }))
+      );
+
       const streamResults = await Promise.allSettled(streamTasks);
       let serverIndex = 1;
-      
+
       for (const r of streamResults) {
         if (r.status === 'fulfilled') {
           for (const su of r.value.urls) {
             if (su.url) {
               channels.push({
-                name: `Server ${serverIndex++}`,
+                name: `Server ${serverIndex++} (${su.quality})`,
                 url: su.url,
+                proxiedUrl: su.url,
                 provider: this.id,
                 quality: su.quality || 'HD',
               });
@@ -145,10 +141,10 @@ export class StreamedPkProvider implements StreamProvider {
           }
         }
       }
-      
+
       return channels;
     } catch (err) {
-      logger.error('Streamed.pk streams resolution failed', err, { matchTitle });
+      logger.error('Streamed.pk streams resolution failed', err);
       return [];
     }
   }
