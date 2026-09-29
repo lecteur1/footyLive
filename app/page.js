@@ -62,37 +62,14 @@ export default function Home() {
         streamList = data.streams;
       } else if (Array.isArray(data?.channels) && data.channels.length > 0) {
         streamList = data.channels;
-      } else if (data?.defaultUrl || data?.url) {
-        streamList = [{ name: 'Server 1 (Live HD)', url: data.defaultUrl || data.url }];
-      }
-
-      // روابط مشغلات تضمين مفتوحة لا تفرض قيود X-Frame-Options
-      if (streamList.length === 0) {
-        streamList = [
-          {
-            name: 'Server 1 (Global Live)',
-            url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-          },
-          {
-            name: 'Server 2 (Fast Stream)',
-            url: 'https://embedme.top/embed/alpha/sports/1',
-          },
-          {
-            name: 'Server 3 (Backup CDN)',
-            url: 'https://crackstream.io/embed/football-1',
-          },
-        ];
+      } else if (data?.defaultUrl) {
+        streamList = [{ name: 'Server 1 (Live HD)', url: data.defaultUrl }];
       }
 
       setStreams(streamList);
     } catch (err) {
-      console.error(err);
-      setStreams([
-        {
-          name: 'Server 1 (Global Live)',
-          url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-        },
-      ]);
+      console.error('Failed to load streams', err);
+      setStreams([]);
     } finally {
       setLoadingStream(false);
     }
@@ -203,7 +180,7 @@ export default function Home() {
               }}
             >
               {loadingStream ? (
-                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66' }}>
+                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66', fontSize: '14px' }}>
                   جاري جلب وتشغيل البث المباشر...
                 </div>
               ) : currentUrl ? (
@@ -211,12 +188,12 @@ export default function Home() {
                   key={currentUrl}
                   src={currentUrl}
                   style={{ width: '100%', height: '100%', border: 'none' }}
-                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture; screen-wake-lock"
+                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                   allowFullScreen
                 />
               ) : (
-                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                  جاري الاتصال بالسيرفر...
+                <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
+                  لا يوجد بث مباشر متاح حالياً لهذه المباراة (قد تكون لم تبدأ بعد أو انتهت).
                 </div>
               )}
             </div>
@@ -257,7 +234,7 @@ export default function Home() {
               )}
             </div>
 
-            {/* أزرار السيرفرات */}
+            {/* أزرار السيرفرات الحقيقية فقط */}
             {streams.length > 1 && (
               <div style={{ marginTop: '14px' }}>
                 <div style={{ fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>اختر سيرفر البث:</div>
