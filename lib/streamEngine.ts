@@ -31,7 +31,7 @@ export async function getMatches(): Promise<Match[]> {
   return cache.swr('all_matches', async () => {
     const allMatchesList: any[] = [];
 
-    // 1. جلب المباريات من WatchFooty
+    // 1. جلب المباريات المباشرة من WatchFooty
     try {
       const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
       if (watchFooty && typeof watchFooty.fetchMatches === 'function') {
@@ -42,9 +42,9 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('WatchFooty fetchMatches failed', err);
     }
 
-    // 2. جلب المباريات من StreamedPk (جدول اليوم الكامل)
+    // 2. جلب جدول اليوم الكامل من StreamedPk (معرّف المزود id هو 'streamed')
     try {
-      const streamedPk = providers.find(p => p.id === 'streamedpk') as any;
+      const streamedPk = providers.find(p => p.id === 'streamed') as any;
       if (streamedPk && typeof streamedPk.fetchMatches === 'function') {
         const spkMatches = await streamedPk.fetchMatches();
         if (Array.isArray(spkMatches)) allMatchesList.push(...spkMatches);
@@ -53,14 +53,14 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('StreamedPk fetchMatches failed', err);
     }
 
-    // 3. توحيد أسماء الفرق واستخراجها في حال كانت داخل العنوان أو في حقول مختلفة
+    // 3. توحيد واستخراج أسماء الفرق وتنسيق الحقول بدقة
     const seen = new Set<string>();
     const normalizedMatches = allMatchesList
       .map((m: any) => {
         let t1 = m.team1 || m.homeTeam || m.home || '';
         let t2 = m.team2 || m.awayTeam || m.away || '';
 
-        // استخراج الأسماء من العنوان إذا كانت مدمجة (Title: Team A vs Team B)
+        // استخراج أسماء الفرق في حال كانت مدمجة في العنوان (Team A vs Team B)
         if ((!t1 || !t2) && m.title) {
           const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
           if (parts.length >= 2) {
@@ -78,18 +78,18 @@ export async function getMatches(): Promise<Match[]> {
           team2: t2,
           homeTeam: t1,
           awayTeam: t2,
-          tournament: m.tournament || m.league || m.category || 'مباراة مباشرة',
+          tournament: m.tournament || m.league || m.category || 'كرة قدم',
         };
       })
       .filter((m: any) => {
-        // فلترة التكرار بين المزودين
+        // منع تكرار نفس المباراة بين المصدرين
         const key = `${m.team1.trim().toLowerCase()}_vs_${m.team2.trim().toLowerCase()}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
 
-    // 4. ترتيب المباريات: المباشرة أولاً ثم حسب التوقيت
+    // 4. الترتيب: المباريات الجارية الآن أولاً، ثم حسب توقيت الانطلاق
     return normalizedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
