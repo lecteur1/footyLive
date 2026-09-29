@@ -8,7 +8,6 @@ export function getStreamRedirectUrl(originalUrl: string): string {
   return originalUrl;
 }
 
-// جلب المباريات الحقيقية الحالية فقط دون أي بيانات وهمية
 export async function getMatches(): Promise<Match[]> {
   const cache = getCacheManager();
   return cache.swr('engine_live_matches_clean', async () => {
@@ -59,6 +58,14 @@ export async function resolveAllStreams(
   };
 }
 
+export async function getMatchStats(matchId: string): Promise<any | null> {
+  return null;
+}
+
 export async function getLeagues(): Promise<string[]> {
   return ['Football'];
+}
+
+export async function getTopTeams(): Promise<string[]> {
+  return [];
 }
