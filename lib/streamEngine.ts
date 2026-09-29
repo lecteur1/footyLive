@@ -18,6 +18,20 @@ const providers = [
   new StreamedPkProvider(),
 ];
 
+// قائمة الحظر الصارم لأي مباريات فئات سنية أو دوريات مغمورة
+const BANNED_PATTERNS = [
+  /\bu-?17\b/i, /\bu-?18\b/i, /\bu-?19\b/i, /\bu-?20\b/i, /\bu-?21\b/i, /\bu-?23\b/i,
+  /under[\s-]?17/i, /under[\s-]?18/i, /under[\s-]?19/i, /under[\s-]?20/i, /under[\s-]?21/i, /under[\s-]?23/i,
+  /serie\s+[b-d]/i, /reserves?/i, /women/i, /ladies/i, /youth/i
+];
+
+// الكلمات المفتاحية لمباريات القمة والبطولات الرسمية
+const PRIORITY_KEYWORDS = [
+  'algeria', 'egypt', 'morocco', 'tunisia', 'saudi', 'iraq', 'qatar', 'kuwait', 'oman',
+  'africa cup', 'caf', 'nations league', 'gulf cup', 'world cup',
+  'spain', 'england', 'croatia', 'france', 'germany', 'italy', 'portugal', 'netherlands'
+];
+
 export function getStreamRedirectUrl(originalUrl: string): string {
   const encoded = Buffer.from(originalUrl).toString('base64url');
   const expires = Date.now() + 4 * 60 * 60 * 1000;
@@ -33,72 +47,76 @@ export async function getMatches(): Promise<Match[]> {
   return cache.swr('all_matches', async () => {
     const allMatchesList: any[] = [];
 
-    // 1. الأولوية الأولى: جدول المباريات العربي الموثوق
-    try {
-      const arabicProv = providers.find(p => p.id === 'arabic_fixtures') as ArabicFixturesProvider;
-      if (arabicProv) {
-        const arMatches = await arabicProv.fetchMatches();
-        if (Array.isArray(arMatches) && arMatches.length > 0) {
-          allMatchesList.push(...arMatches);
-        }
-      }
-    } catch (err) {
-      logger.error('ArabicFixtures fetch failed', err);
-    }
-
-    // 2. مزودات البث الأخرى (Streamed / CdnLive / WatchFooty)
+    // 1. استدعاء المزودات بالتتابع
     for (const provider of providers) {
-      if (provider.id === 'arabic_fixtures') continue;
       try {
         if (typeof (provider as any).fetchMatches === 'function') {
           const list = await (provider as any).fetchMatches();
           if (Array.isArray(list)) allMatchesList.push(...list);
         }
-      } catch (e) {}
+      } catch (err) {
+        logger.error(`Provider ${provider.name} failed fetching fixtures`, err);
+      }
     }
 
-    // 3. توحيد الحقول وإزالة التكرار
+    // 2. توحيد الحقول وتنظيف النصوص
     const seen = new Set<string>();
-    const normalizedMatches = allMatchesList
-      .map((m: any) => {
-        let t1 = (typeof m.team1 === 'object' ? m.team1?.name : m.team1) ||
-                 (typeof m.homeTeam === 'object' ? m.homeTeam?.name : m.homeTeam) || '';
-        let t2 = (typeof m.team2 === 'object' ? m.team2?.name : m.team2) ||
-                 (typeof m.awayTeam === 'object' ? m.awayTeam?.name : m.awayTeam) || '';
+    const cleanedMatches: any[] = [];
 
-        if ((!t1 || !t2) && m.title && typeof m.title === 'string') {
-          const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
-          if (parts.length >= 2) {
-            t1 = t1 || parts[0].trim();
-            t2 = t2 || parts[1].trim();
-          }
+    for (const m of allMatchesList) {
+      let t1 = (typeof m.team1 === 'object' ? m.team1?.name : m.team1) ||
+               (typeof m.homeTeam === 'object' ? m.homeTeam?.name : m.homeTeam) || '';
+      let t2 = (typeof m.team2 === 'object' ? m.team2?.name : m.team2) ||
+               (typeof m.awayTeam === 'object' ? m.awayTeam?.name : m.awayTeam) || '';
+
+      if ((!t1 || !t2) && m.title && typeof m.title === 'string') {
+        const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
+        if (parts.length >= 2) {
+          t1 = t1 || parts[0].trim();
+          t2 = t2 || parts[1].trim();
         }
+      }
 
-        const name1 = String(t1 || 'الفريق 1').trim();
-        const name2 = String(t2 || 'الفريق 2').trim();
+      const name1 = String(t1 || 'الفريق 1').trim();
+      const name2 = String(t2 || 'الفريق 2').trim();
+      const tournament = String(m.tournament || m.league || 'كرة قدم').trim();
+      const fullText = `${name1} ${name2} ${tournament}`;
 
-        return {
-          ...m,
-          team1: name1,
-          team2: name2,
-          homeTeam: name1,
-          awayTeam: name2,
-          tournament: m.tournament || m.league || 'كرة قدم',
-        };
-      })
-      .filter((m: any) => {
-        const key = `${String(m.team1 || '').toLowerCase()}_vs_${String(m.team2 || '').toLowerCase()}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
+      // حظر مباريات الفئات السنية والدوريات الثانوية تماماً
+      const isBanned = BANNED_PATTERNS.some(regex => regex.test(fullText));
+      if (isBanned) continue;
+
+      // منع التكرار
+      const matchKey = `${name1.toLowerCase()}_vs_${name2.toLowerCase()}`;
+      if (seen.has(matchKey)) continue;
+      seen.add(matchKey);
+
+      // احتساب رتبة الأهمية
+      const lower = fullText.toLowerCase();
+      const isTopPriority = PRIORITY_KEYWORDS.some(k => lower.includes(k));
+
+      cleanedMatches.push({
+        ...m,
+        team1: name1,
+        team2: name2,
+        homeTeam: name1,
+        awayTeam: name2,
+        tournament: tournament,
+        priorityRank: isTopPriority ? 1 : 2,
       });
+    }
 
-    // 4. الترتيب: المباشر أولاً ثم حسب التوقيت
-    return normalizedMatches.sort((a: any, b: any) => {
+    // 3. الترتيب: المباشر أولاً، ثم المباريات الكبرى، ثم حسب التوقيت
+    return cleanedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
       if (aLive && !bLive) return -1;
       if (!aLive && bLive) return 1;
+
+      if (a.priorityRank !== b.priorityRank) {
+        return a.priorityRank - b.priorityRank;
+      }
+
       return (a.timestamp || 0) - (b.timestamp || 0);
     });
   }, 15);
@@ -149,7 +167,6 @@ export async function resolveAllStreams(
     for (const server of allServers) {
       if (!seenUrls.has(server.url)) {
         seenUrls.add(server.url);
-        // تسمية شفافة لحماية مصداقية التطبيق
         const serverLabel = server.name && !server.name.startsWith('Server')
           ? `${server.name}`
           : `سيرفر ${serverIndex++} (بث مباشر)`;
