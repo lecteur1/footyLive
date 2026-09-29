@@ -1,12 +1,12 @@
 {
-  "name": "FootyLive Premium Streams",
-  "short_name": "FootyLive",
-  "description": "Watch live football matches free on FootyLive. Real-time scores and premium ad-free streams.",
+  "name": "Saifou Sat | سيفو سات للبث المباشر",
+  "short_name": "Saifou Sat",
+  "description": "بث مباشر للمباريات بجودة عالية وبدون تقطيع على سيفو سات.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#040405",
-  "theme_color": "#8b5cf6",
-  "orientation": "any",
+  "background_color": "#090e0b",
+  "theme_color": "#00853f",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "https://img.icons8.com/color/512/football.png",
