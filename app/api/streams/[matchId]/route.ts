@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMatches, resolveAllStreams } from '@/lib/streamEngine';
+import { getMatchDetails, resolveAllStreams } from '@/lib/streamEngine';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -9,26 +9,27 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   const { matchId } = await params;
-
   try {
-    const allMatches = await getMatches().catch(() => []);
-    const match = allMatches.find(m => String(m.id) === String(matchId)) || null;
+    const match = await getMatchDetails(matchId);
 
-    const title = match?.title || decodeURIComponent(matchId);
-    const homeTeam = (typeof match?.homeTeam === 'object' ? (match.homeTeam as any)?.name : match?.homeTeam) || match?.team1 || '';
-    const awayTeam = (typeof match?.awayTeam === 'object' ? (match.awayTeam as any)?.name : match?.awayTeam) || match?.team2 || '';
+    const title = match?.title || decodeURIComponent(matchId).replace(/[-_]/g, ' ');
+    const homeTeam = (typeof match?.homeTeam === 'object' ? match?.homeTeam?.name : match?.homeTeam) || match?.team1 || '';
+    const awayTeam = (typeof match?.awayTeam === 'object' ? match?.awayTeam?.name : match?.awayTeam) || match?.team2 || '';
 
+    // حل السيرفرات الحقيقية عبر المحرك
     const resolved = await resolveAllStreams(title, matchId, String(homeTeam), String(awayTeam), match);
+
+    const defaultUrl = resolved.proxiedUrl || resolved.url || (resolved.channels && resolved.channels[0]?.url) || '';
 
     return NextResponse.json({
       matchTitle: title,
       matchStatus: match?.status || 'live',
       streams: resolved.channels || [],
-      defaultUrl: resolved.url || (resolved.channels && resolved.channels[0]?.url) || '',
-      isDirectHls: false,
+      defaultUrl: defaultUrl,
+      isDirectHls: defaultUrl.includes('.m3u8') || defaultUrl.includes('.mpd') || defaultUrl.includes('.mp4')
     }, {
       headers: {
-        'Cache-Control': 'no-store, max-age=0',
+        'Cache-Control': 'no-store, max-age=0'
       }
     });
   } catch (err: any) {
