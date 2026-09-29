@@ -11,7 +11,8 @@ export const metadata = {
     statusBarStyle: 'black-translucent',
   },
   icons: {
-    icon: '/manifest.json',
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
   },
 };
 
@@ -20,15 +21,18 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#00853f',
+  themeColor: '#090e0b',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className="dark" style={{ background: '#090e0b', colorScheme: 'dark' }}>
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-touch-fullscreen" content="yes" />
       </head>
       <body
         style={{
