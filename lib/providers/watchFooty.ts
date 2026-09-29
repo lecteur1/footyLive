@@ -8,30 +8,44 @@ const WATCHFOOTY_API = process.env.NEXT_PUBLIC_API_BASE || 'https://api.watchfoo
 const TIMEOUT_MS = 4000;
 const SHORT_TIMEOUT = 2500;
 
-// البطولات والدوريات الرسمية المعتمدة فقط (نفس أسلوب التطبيقات العالمية)
+// 1. البطولات المسموح بها فقط
 const ALLOWED_LEAGUES = [
   'africa cup',
   'afcon',
   'caf',
-  'uefa',
-  'champions league',
-  'europa',
-  'conference league',
-  'nations league',
+  'uefa champions league',
+  'uefa europa league',
+  'uefa conference league',
+  'uefa nations league',
   'premier league',
   'la liga',
   'serie a',
   'bundesliga',
   'ligue 1',
   'world cup',
+  'fifa world cup',
   'euro',
   'copa america',
   'asian cup',
-  'afc champions',
+  'afc champions league',
   'international friendly',
-  'pro league', // دوري روشن
+  'pro league',
   'fa cup',
-  'carabao'
+  'carabao cup'
+];
+
+// 2. بطولات مستبعدة نهائياً لأنها تسبب الشاشات المعطلة
+const BLOCKED_LEAGUES = [
+  'concacaf',
+  'caribbean',
+  'reserve',
+  'u19',
+  'u17',
+  'u20',
+  'u21',
+  'amateur',
+  'shield',
+  'asean'
 ];
 
 export class WatchFootyProvider implements StreamProvider {
@@ -63,15 +77,26 @@ export class WatchFootyProvider implements StreamProvider {
     const raw = await this.fetchRawMatches();
     const normalized = raw.map(normalizeWatchFootyMatch);
 
-    // فلترة المباريات: استبعاد البطولات الضعيفة أو التي لا تملك روابط وسيرفرات
     return normalized.filter((m: Match) => {
-      if (!m.title) return false;
-      const tournament = (m.tournament || '').toLowerCase();
-      const isTopLeague = ALLOWED_LEAGUES.some(l => tournament.includes(l));
-      
-      // إذا كانت المباراة جارية، يجب أن تحتوي على مصادر بث مسبقة
-      const hasStreams = Array.isArray(m.sources) && m.sources.length > 0;
-      return isTopLeague && (m.status !== 'live' || hasStreams);
+      // التحقق من وجود اسم للمباراة
+      if (!m.title || !m.tournament) return false;
+
+      const tournament = m.tournament.toLowerCase();
+
+      // استبعاد أي بطولة موجودة في القائمة السوداء
+      if (BLOCKED_LEAGUES.some(blocked => tournament.includes(blocked))) {
+        return false;
+      }
+
+      // مطابقة البطولة مع القائمة البيضاء فقط
+      const isAllowed = ALLOWED_LEAGUES.some(allowed => tournament.includes(allowed));
+      if (!isAllowed) return false;
+
+      // التأكد من أن المباراة تحتوي على مصادر بث مسبقة
+      const hasValidStreams = Array.isArray(m.sources) && m.sources.length > 0;
+      if (!hasValidStreams) return false;
+
+      return true;
     });
   }
 
