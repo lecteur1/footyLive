@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatchDetails, resolveAllStreams } from '@/lib/streamEngine';
 
-export const revalidate = 15; // stream links change less frequently, 15s is safe
+export const revalidate = 15;
 
 export async function GET(
   request: NextRequest,
@@ -19,12 +19,17 @@ export async function GET(
 
     const resolved = await resolveAllStreams(match.title, matchId, homeTeam, awayTeam, match);
 
+    // التأكد من أن كل سيرفر يمر عبر المسار المعقم والخالي من الإعلانات
+    const safeStreams = (resolved.channels || []).map((stream) => ({
+      ...stream,
+      url: stream.proxiedUrl,
+    }));
+
     return NextResponse.json({
       matchTitle: match.title,
       matchStatus: match.status,
-      streams: resolved.channels || [],
+      streams: safeStreams,
       defaultUrl: resolved.proxiedUrl,
-      isDirectHls: resolved.proxiedUrl.includes('.m3u8') || resolved.proxiedUrl.includes('.mpd') || resolved.proxiedUrl.includes('.mp4')
     });
   } catch (err: any) {
     return NextResponse.json(
