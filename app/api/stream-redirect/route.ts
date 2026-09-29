@@ -33,48 +33,75 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL scheme' }, { status: 400 });
     }
 
-    // بدلاً من 302 Redirect، نعرض صفحة وسيطة نظيفة تلغي قيود الساندبوكس وتفتح البث مباشرة
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta name="referrer" content="no-referrer" />
-          <style>
-            html, body {
-              margin: 0;
-              padding: 0;
-              width: 100%;
-              height: 100%;
-              background-color: #000;
-              overflow: hidden;
-            }
-            iframe {
-              width: 100%;
-              height: 100%;
-              border: 0;
-            }
-          </style>
-        </head>
-        <body>
-          <iframe 
-            src="${decoded}" 
-            allowfullscreen="true" 
-            webkitallowfullscreen="true" 
-            mozallowfullscreen="true"
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          ></iframe>
-        </body>
-      </html>
-    `;
+    const html = `<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="referrer" content="no-referrer">
+  <title>Live Stream</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+  </style>
+  <script>
+    // 1. شل حركة أي محاولة لفتح نافذة منبثقة أو تبويب جديد نهائياً
+    window.open = function() { return null; };
+    Object.defineProperty(window, 'open', {
+      configurable: false,
+      writable: false,
+      value: function() { return null; }
+    });
+
+    // 2. اعتراض أي نقرة تحاول فتح رابط خارجي target="_blank"
+    window.addEventListener('click', function(e) {
+      var target = e.target;
+      while (target && target.tagName !== 'A') {
+        target = target.parentNode;
+      }
+      if (target && target.tagName === 'A') {
+        if (target.target === '_blank' || target.getAttribute('target') === '_blank') {
+          target.removeAttribute('target');
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      }
+    }, true);
+  </script>
+</head>
+<body>
+  <iframe 
+    src="${decoded}" 
+    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+    allowfullscreen="true" 
+    webkitallowfullscreen="true" 
+    mozallowfullscreen="true"
+    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  ></iframe>
+</body>
+</html>`;
 
     return new NextResponse(html, {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        // إزالة أي قيود أمنية تعترض تشغيل الفيديو
         'Access-Control-Allow-Origin': '*',
+        // ترويسة حظر الـ Popups على مستوى المتصفح برمجياً
+        'Content-Security-Policy': 'sandbox allow-scripts allow-same-origin allow-forms allow-presentation;',
       },
     });
 
