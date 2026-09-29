@@ -46,14 +46,13 @@ export async function GET(request: NextRequest) {
   </style>
 </head>
 <body>
-  <iframe 
-    src="${decoded}" 
-    sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-    allowfullscreen="true" 
-    webkitallowfullscreen="true" 
-    mozallowfullscreen="true"
-    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-  ></iframe>
+  <iframe
+  src="${decoded}"
+  allowfullscreen="true"
+  webkitallowfullscreen="true"
+  mozallowfullscreen="true"
+  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+></iframe>
 </body>
 </html>`;
 
