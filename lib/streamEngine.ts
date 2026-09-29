@@ -10,15 +10,25 @@ const SECRET_KEY = process.env.STREAM_SECRET || 'default_stream_hmac_secret_key_
 
 export { getMatchDetails, getMatchStats, getLeagues, getTopTeams };
 
+// إعادة ترتيب المزودات: تقديم المزودات ذات الاستقرار العالي وقلة الإعلانات أولاً
 const providers = [
-  new WatchFootyProvider(),
-  new CdnLiveProvider(),
   new StreamedPkProvider(),
+  new CdnLiveProvider(),
+  new WatchFootyProvider(),
+];
+
+// قائمة النطاقات الإعلانية المزعجة لاستبعادها تلقائياً من قائمة السيرفرات
+const BLOCKED_DOMAINS = [
+  'gotrackier.com',
+  'pipefulx.com',
+  'istod.com',
+  'atzonebd.com',
+  'princesselizabeth'
 ];
 
 export function getStreamRedirectUrl(originalUrl: string): string {
   const encoded = Buffer.from(originalUrl).toString('base64url');
-  const expires = Date.now() + 4 * 60 * 60 * 1000; // 4 hours expiration
+  const expires = Date.now() + 4 * 60 * 60 * 1000; // صلاحية الرابط 4 ساعات
   const signature = crypto
     .createHmac('sha256', SECRET_KEY)
     .update(`${encoded}:${expires}`)
@@ -29,9 +39,14 @@ export function getStreamRedirectUrl(originalUrl: string): string {
 export async function getMatches(): Promise<Match[]> {
   const cache = getCacheManager();
   return cache.swr('all_matches', async () => {
+    // محاولة جلب المباريات من المزود الأساسي
     const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
     if (!watchFooty) return [];
-    return watchFooty.fetchMatches();
+    
+    const matches = await watchFooty.fetchMatches();
+    
+    // إبقاء المباريات السليمة والتي تملك بيانات صالحة فقط
+    return (matches || []).filter((m: Match) => Boolean(m.title && (m.homeTeam || m.awayTeam)));
   }, 15);
 }
 
@@ -64,7 +79,7 @@ export async function resolveAllStreams(
     const allServers: Channel[] = [];
 
     for (const r of results) {
-      if (r.status === 'fulfilled') {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
         allServers.push(...r.value);
       }
     }
@@ -73,26 +88,50 @@ export async function resolveAllStreams(
       throw new Error('No streams available from any provider');
     }
 
+    // تصفية السيرفرات: استبعاد أي رابط إعلاني مشبوه
+    const safeServers = allServers.filter(server => {
+      if (!server.url) return false;
+      const lower = server.url.toLowerCase();
+      return !BLOCKED_DOMAINS.some(domain => lower.includes(domain));
+    });
+
+    const finalServersList = safeServers.length > 0 ? safeServers : allServers;
+
+    // أولوية الترتيب: 
+    // 1. روابط البث المباشرة (.m3u8 أو hls)
+    // 2. الجودة العالية (FHD, HD, 1080p, 720p)
     const qualityOrder: Record<string, number> = { 'FHD': 0, 'HD': 0, '1080p': 0, '720p': 1, 'SD': 2 };
-    allServers.sort((a, b) => (qualityOrder[a.quality || 'SD'] || 2) - (qualityOrder[b.quality || 'SD'] || 2));
+    
+    finalServersList.sort((a, b) => {
+      const aIsHls = a.url.includes('.m3u8') ? 0 : 1;
+      const bIsHls = b.url.includes('.m3u8') ? 0 : 1;
+      if (aIsHls !== bIsHls) return aIsHls - bIsHls;
+
+      const qA = qualityOrder[a.quality || 'SD'] ?? 2;
+      const qB = qualityOrder[b.quality || 'SD'] ?? 2;
+      return qA - qB;
+    });
 
     const seenUrls = new Set<string>();
     const uniqueServers: Channel[] = [];
     let serverIndex = 1;
 
-    for (const server of allServers) {
+    for (const server of finalServersList) {
       if (!seenUrls.has(server.url)) {
         seenUrls.add(server.url);
+        const proxied = getStreamRedirectUrl(server.url);
         uniqueServers.push({
           ...server,
           name: `Server ${serverIndex++}`,
-          proxiedUrl: getStreamRedirectUrl(server.url),
+          proxiedUrl: proxied,
+          // استخدام الرابط المحمي كمعرف أساسي لمنع تسريب الروابط المباشرة
+          url: proxied, 
         });
       }
     }
 
     return {
-      url: uniqueServers[0].url,
+      url: uniqueServers[0].proxiedUrl || uniqueServers[0].url,
       proxiedUrl: uniqueServers[0].proxiedUrl || getStreamRedirectUrl(uniqueServers[0].url),
       channels: uniqueServers,
       serverCount: uniqueServers.length,
