@@ -1,51 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMatches } from '@/lib/streamEngine';
 
-export const revalidate = 10; // short revalidation for live match updates
+export const revalidate = 60; // كاش لمدة دقيقة واحدة
 
-// قائمة البطولات والكلمات المفتاحية ذات الأولوية
+// كلمات مفتاحية بالإنجليزية (كما يرجعها المصدر بالضبط) + بالعربية كاحتياط
 const PRIORITY_KEYWORDS = [
-  'champions league', 'premier league', 'laliga', 'serie a', 'bundesliga',
-  'ligue 1', 'caf', 'africa', 'algeria', 'morocco', 'egypt', 'saudi',
-  'world cup', 'euro', 'nations league', 'afcon', 'copa', 'pro league'
+  // منتخبات وبطولات شمال إفريقيا والخليج
+  'algeria', 'egypt', 'morocco', 'tunisia', 'saudi', 'iraq', 'oman', 'kuwait', 'qatar', 'uae',
+  'caf', 'africa', 'afcon', 'gulf cup', 'arabian gulf',
+  
+  // البطولات الأوروبية الكبرى
+  'champions league', 'premier league', 'laliga', 'la liga', 'serie a', 'bundesliga', 'ligue 1',
+  'nations league', 'uefa', 'euro', 'world cup',
+  'spain', 'england', 'france', 'germany', 'italy', 'portugal', 'argentina', 'brazil',
+
+  // كلمات عربية احتياطية في حال كان هناك مصدر معرب
+  'الجزائر', 'مصر', 'المغرب', 'تونس', 'السعودية', 'العراق', 'أفريقيا', 'الخليج'
 ];
 
 export async function GET(request: NextRequest) {
   try {
-    const allMatches = await getMatches();
+    const rawMatches = await getMatches();
+    const allMatches = Array.isArray(rawMatches) ? rawMatches : [];
 
-    // 1. فلترة ذكية: إبقاء المباريات التي تملك سيرفرات أو تتبع بطولات مهمة
-    const filtered = (allMatches || []).filter((match: any) => {
-      // التحقق من وجود سيرفرات أو علامة بث متاح
-      const hasStreams = Boolean(
-        match.hasStreams ||
-        (Array.isArray(match.streams) && match.streams.length > 0)
-      );
+    // إذا لم يرجع المصدر أي شيء
+    if (allMatches.length === 0) {
+      return NextResponse.json([]);
+    }
 
+    // 1. فلترة المباريات الهامة
+    const priorityMatches = allMatches.filter((match: any) => {
       const tournament = (match.tournament || match.league || '').toLowerCase();
-      const title = (match.title || '').toLowerCase();
-      const isPriority = PRIORITY_KEYWORDS.some(
-        (key) => tournament.includes(key) || title.includes(key)
-      );
+      const title = (match.title || `${match.team1 || ''} ${match.team2 || ''}`).toLowerCase();
 
-      // تظهر المباراة إذا كان لها سيرفر مؤكد، أو كانت بطولة هامة وفي وقتها
-      return hasStreams || isPriority;
+      return PRIORITY_KEYWORDS.some((key) => 
+        tournament.includes(key) || title.includes(key)
+      );
     });
 
-    // استخدام القائمة المفلترة، وفي حال لم يتبق شيء نرجع القائمة الأصلية لتجنب الصفحة الفارغة
-    const finalList = filtered.length > 0 ? filtered : allMatches;
+    // 2. إذا وُجدت مباريات مهمة نعرضها، وإذا لم توجد (أو في الصباح الباكر) نعرض كل المباريات المتاحة بدلاً من ترك الشاشة سوداء
+    const displayList = priorityMatches.length > 0 ? priorityMatches : allMatches;
 
-    // 2. الترتيب: المباشر أولاً، ثم حسب الأولوية، ثم حسب التوقيت
-    const sorted = [...finalList].sort((a: any, b: any) => {
-      if (a.status === 'live' && b.status !== 'live') return -1;
-      if (b.status === 'live' && a.status !== 'live') return 1;
-      if ((a.priority ?? 99) !== (b.priority ?? 99)) {
-        return (a.priority ?? 99) - (b.priority ?? 99);
-      }
+    // 3. الترتيب الذكي:
+    // المباريات الجارية الآن أولاً، ثم حسب توقيت الانطلاق الزمني
+    const sorted = [...displayList].sort((a: any, b: any) => {
+      const aIsLive = a.status === 'live' || a.isLive;
+      const bIsLive = b.status === 'live' || b.isLive;
+
+      if (aIsLive && !bIsLive) return -1;
+      if (!aIsLive && bIsLive) return 1;
+
       return (a.timestamp ?? 0) - (b.timestamp ?? 0);
     });
 
-    return NextResponse.json({ matches: sorted });
+    // نرجع مصفوفة مباشرة
+    return NextResponse.json(sorted);
   } catch (err: any) {
     return NextResponse.json(
       { error: 'Failed to retrieve match fixtures: ' + err.message },
