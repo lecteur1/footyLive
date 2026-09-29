@@ -53,7 +53,18 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('StreamedPk fetchMatches failed', err);
     }
 
-    // 3. توحيد واستخراج أسماء الفرق وتنسيق الحقول بأمان تام
+    // 3. جلب المباريات وقنوات البث من CdnLive
+    try {
+      const cdnLive = providers.find(p => p.id === 'cdnlive') as any;
+      if (cdnLive && typeof cdnLive.fetchMatches === 'function') {
+        const cdnMatches = await cdnLive.fetchMatches();
+        if (Array.isArray(cdnMatches)) allMatchesList.push(...cdnMatches);
+      }
+    } catch (err) {
+      logger.error('CdnLive fetchMatches failed', err);
+    }
+
+    // 4. توحيد واستخراج أسماء الفرق وتنسيق الحقول بأمان تام
     const seen = new Set<string>();
     const normalizedMatches = allMatchesList
       .map((m: any) => {
@@ -65,7 +76,6 @@ export async function getMatches(): Promise<Match[]> {
                  (typeof m.awayTeam === 'object' ? m.awayTeam?.name : m.awayTeam) ||
                  (typeof m.away === 'object' ? m.away?.name : m.away) || '';
 
-        // استخراج الأسماء إذا كانت مدمجة في العنوان
         if ((!t1 || !t2) && m.title && typeof m.title === 'string') {
           const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
           if (parts.length >= 2) {
@@ -93,7 +103,7 @@ export async function getMatches(): Promise<Match[]> {
         return true;
       });
 
-    // 4. الترتيب: المباشر أولاً ثم حسب التوقيت
+    // 5. الترتيب: المباشر أولاً ثم حسب التوقيت
     return normalizedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
