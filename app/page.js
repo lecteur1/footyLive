@@ -24,9 +24,7 @@ export default function Home() {
       ];
 
       window.open = function (url, target, features) {
-        if (!url || typeof url !== 'string') {
-          return null;
-        }
+        if (!url || typeof url !== 'string') return null;
 
         try {
           const targetUrl = new URL(url, window.location.href);
@@ -37,7 +35,7 @@ export default function Home() {
           );
 
           if (!isAllowed) {
-            console.warn('تم اعتراض نافذة إعلانية:', targetUrl.origin);
+            console.warn('Ad blocked:', targetUrl.origin);
             return null;
           }
         } catch (e) {
@@ -223,7 +221,6 @@ export default function Home() {
                     key={currentUrl}
                     src={currentUrl}
                     style={{ width: '100%', height: '100%', border: 'none' }}
-                    sandbox="allow-scripts allow-same-origin allow-forms"
                     allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                     allowFullScreen
                   />
