@@ -16,6 +16,20 @@ const providers = [
   new StreamedPkProvider(),
 ];
 
+// كلمات مفتاحية للمباريات الهامشية التي نريد تنظيف القائمة منها
+const EXCLUDE_KEYWORDS = [
+  'u17', 'u18', 'u19', 'u20', 'u21', 'u23',
+  'under 19', 'under 20', 'under 21', 'under-19', 'under-20', 'under-21',
+  'serie b', 'serie c', 'reserve', 'women'
+];
+
+// كلمات مفتاحية ذات أولوية عليا (تظهر في رأس القائمة)
+const HIGH_PRIORITY_KEYWORDS = [
+  'africa cup', 'caf', 'nations league', 'gulf cup', 'arabian gulf',
+  'champions league', 'premier league', 'la liga', 'serie a', 'bundesliga',
+  'world cup', 'algeria', 'morocco', 'egypt', 'saudi', 'iraq', 'spain', 'england'
+];
+
 export function getStreamRedirectUrl(originalUrl: string): string {
   const encoded = Buffer.from(originalUrl).toString('base64url');
   const expires = Date.now() + 4 * 60 * 60 * 1000;
@@ -64,7 +78,7 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('CdnLive fetchMatches failed', err);
     }
 
-    // 4. توحيد واستخراج أسماء الفرق وتنسيق الحقول بأمان تام
+    // 4. توحيد الحقول والفلترة الذكية
     const seen = new Set<string>();
     const normalizedMatches = allMatchesList
       .map((m: any) => {
@@ -86,6 +100,16 @@ export async function getMatches(): Promise<Match[]> {
 
         const name1 = String(t1 || 'الفريق 1').trim();
         const name2 = String(t2 || 'الفريق 2').trim();
+        const tournament = m.tournament || m.league || m.category || 'كرة قدم';
+
+        // حساب درجة الأهمية للمباراة
+        const fullText = `${name1} ${name2} ${tournament}`.toLowerCase();
+        const isExcluded = EXCLUDE_KEYWORDS.some(k => fullText.includes(k));
+        const isHighPriority = HIGH_PRIORITY_KEYWORDS.some(k => fullText.includes(k));
+
+        let priorityScore = 50;
+        if (isHighPriority) priorityScore = 10;
+        if (isExcluded) priorityScore = 90;
 
         return {
           ...m,
@@ -93,22 +117,36 @@ export async function getMatches(): Promise<Match[]> {
           team2: name2,
           homeTeam: name1,
           awayTeam: name2,
-          tournament: m.tournament || m.league || m.category || 'كرة قدم',
+          tournament: tournament,
+          priorityScore: priorityScore,
         };
       })
       .filter((m: any) => {
+        // فلترة التكرار
         const key = `${String(m.team1 || '').toLowerCase()}_vs_${String(m.team2 || '').toLowerCase()}`;
         if (seen.has(key)) return false;
         seen.add(key);
+
+        // استبعاد مباريات الشباب والدوريات المغمورة تماماً إلا إذا كان لها بث مباشر الآن
+        const isLive = m.status === 'live' || m.isLive;
+        if (!isLive && m.priorityScore >= 90) {
+          return false;
+        }
+
         return true;
       });
 
-    // 5. الترتيب: المباشر أولاً ثم حسب التوقيت
+    // 5. الترتيب: المباشر أولاً، ثم البطولات الهامة، ثم حسب التوقيت
     return normalizedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
       if (aLive && !bLive) return -1;
       if (!aLive && bLive) return 1;
+
+      if ((a.priorityScore || 50) !== (b.priorityScore || 50)) {
+        return (a.priorityScore || 50) - (b.priorityScore || 50);
+      }
+
       return (a.timestamp || 0) - (b.timestamp || 0);
     });
   }, 15);
