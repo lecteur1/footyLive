@@ -31,7 +31,7 @@ export async function getMatches(): Promise<Match[]> {
   return cache.swr('all_matches', async () => {
     const allMatchesList: any[] = [];
 
-    // 1. جلب المباريات المباشرة من WatchFooty
+    // 1. جلب المباريات من WatchFooty
     try {
       const watchFooty = providers.find(p => p.id === 'watchfooty') as WatchFootyProvider;
       if (watchFooty && typeof watchFooty.fetchMatches === 'function') {
@@ -42,7 +42,7 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('WatchFooty fetchMatches failed', err);
     }
 
-    // 2. جلب جدول اليوم الكامل من StreamedPk (معرّف المزود id هو 'streamed')
+    // 2. جلب المباريات من StreamedPk
     try {
       const streamedPk = providers.find(p => p.id === 'streamed') as any;
       if (streamedPk && typeof streamedPk.fetchMatches === 'function') {
@@ -53,15 +53,20 @@ export async function getMatches(): Promise<Match[]> {
       logger.error('StreamedPk fetchMatches failed', err);
     }
 
-    // 3. توحيد واستخراج أسماء الفرق وتنسيق الحقول بدقة
+    // 3. توحيد واستخراج أسماء الفرق وتنسيق الحقول بأمان تام
     const seen = new Set<string>();
     const normalizedMatches = allMatchesList
       .map((m: any) => {
-        let t1 = m.team1 || m.homeTeam || m.home || '';
-        let t2 = m.team2 || m.awayTeam || m.away || '';
+        let t1 = (typeof m.team1 === 'object' ? m.team1?.name : m.team1) ||
+                 (typeof m.homeTeam === 'object' ? m.homeTeam?.name : m.homeTeam) ||
+                 (typeof m.home === 'object' ? m.home?.name : m.home) || '';
 
-        // استخراج أسماء الفرق في حال كانت مدمجة في العنوان (Team A vs Team B)
-        if ((!t1 || !t2) && m.title) {
+        let t2 = (typeof m.team2 === 'object' ? m.team2?.name : m.team2) ||
+                 (typeof m.awayTeam === 'object' ? m.awayTeam?.name : m.awayTeam) ||
+                 (typeof m.away === 'object' ? m.away?.name : m.away) || '';
+
+        // استخراج الأسماء إذا كانت مدمجة في العنوان
+        if ((!t1 || !t2) && m.title && typeof m.title === 'string') {
           const parts = m.title.split(/\s+(?:vs\.?|-|ضد)\s+/i);
           if (parts.length >= 2) {
             t1 = t1 || parts[0].trim();
@@ -69,27 +74,26 @@ export async function getMatches(): Promise<Match[]> {
           }
         }
 
-        t1 = t1 || 'الفريق 1';
-        t2 = t2 || 'الفريق 2';
+        const name1 = String(t1 || 'الفريق 1').trim();
+        const name2 = String(t2 || 'الفريق 2').trim();
 
         return {
           ...m,
-          team1: t1,
-          team2: t2,
-          homeTeam: t1,
-          awayTeam: t2,
+          team1: name1,
+          team2: name2,
+          homeTeam: name1,
+          awayTeam: name2,
           tournament: m.tournament || m.league || m.category || 'كرة قدم',
         };
       })
       .filter((m: any) => {
-        // منع تكرار نفس المباراة بين المصدرين
-        const key = `${m.team1.trim().toLowerCase()}_vs_${m.team2.trim().toLowerCase()}`;
+        const key = `${String(m.team1 || '').toLowerCase()}_vs_${String(m.team2 || '').toLowerCase()}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });
 
-    // 4. الترتيب: المباريات الجارية الآن أولاً، ثم حسب توقيت الانطلاق
+    // 4. الترتيب: المباشر أولاً ثم حسب التوقيت
     return normalizedMatches.sort((a: any, b: any) => {
       const aLive = a.status === 'live' || a.isLive;
       const bLive = b.status === 'live' || b.isLive;
