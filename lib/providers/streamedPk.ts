@@ -39,7 +39,6 @@ export class StreamedPkProvider implements StreamProvider {
     }, 20);
   }
 
-  // جلب المباريات من Streamed.pk مباشرة لعرضها في الجدول
   async fetchMatches(): Promise<Match[]> {
     try {
       const matches = await this.fetchRawMatches();
@@ -78,22 +77,60 @@ export class StreamedPkProvider implements StreamProvider {
     }
   }
 
+  // فحص ذكي لاستخراج روابط HLS المباشرة وتجنب صفحات embed الإعلانية متى ما توفرت
+  private extractBestStreamUrl(item: any): string {
+    if (!item) return '';
+
+    // البحث أولاً عن روابط البث المباشر النقية
+    const candidates = [
+      item.streamUrl,
+      item.hlsUrl,
+      item.m3u8,
+      item.source,
+      item.url,
+      item.embedUrl,
+      item.iframe
+    ];
+
+    // 1. أولوية مطلقة لأي رابط ينتهي بـ m3u8 أو mpd أو يحتوي تدفقاً مباشراً
+    for (const link of candidates) {
+      if (typeof link === 'string' && (link.includes('.m3u8') || link.includes('.mpd'))) {
+        return link;
+      }
+    }
+
+    // 2. إذا لم يتوفر رابط m3u8 صريح، نأخذ الرابط المتاح مع تنظيفه
+    for (const link of candidates) {
+      if (typeof link === 'string' && link.startsWith('http')) {
+        return link;
+      }
+    }
+
+    return '';
+  }
+
   private async resolveStreamedStream(source: string, id: string): Promise<{ url: string; quality: string }[]> {
     try {
       const url = `${STREAMED_STREAM}/${source}/${id}`;
       const data = await fetchWithTimeout(url, SHORT_TIMEOUT);
       
       if (Array.isArray(data) && data.length > 0) {
-        return data.map((s: any) => ({
-          url: s.embedUrl || s.url || s.streamUrl || s.iframe || '',
-          quality: s.hd ? 'HD' : 'SD',
-        }));
+        return data
+          .map((s: any) => ({
+            url: this.extractBestStreamUrl(s),
+            quality: s.hd ? 'HD' : 'SD',
+          }))
+          .filter((s) => Boolean(s.url));
       }
-      if (data?.url || data?.embedUrl || data?.streamUrl || data?.iframe) {
-        return [{
-          url: data.embedUrl || data.url || data.streamUrl || data.iframe,
-          quality: data.hd ? 'HD' : 'SD',
-        }];
+
+      if (data) {
+        const streamUrl = this.extractBestStreamUrl(data);
+        if (streamUrl) {
+          return [{
+            url: streamUrl,
+            quality: data.hd ? 'HD' : 'SD',
+          }];
+        }
       }
       return [];
     } catch (err) {
@@ -113,7 +150,6 @@ export class StreamedPkProvider implements StreamProvider {
       const channels: Channel[] = [];
       const streamTasks: Promise<{ urls: { url: string; quality: string }[]; source: any }>[] = [];
 
-      // مطابقة بالمعرّف ID أولاً أو تطابق الأسماء لضمان العثور على المباراة
       for (const m of matches) {
         const isIdMatch = String(m.id) === String(matchId);
         const isNameMatch = teamsMatch(matchTitle, m.title) || 
@@ -138,8 +174,9 @@ export class StreamedPkProvider implements StreamProvider {
         if (r.status === 'fulfilled') {
           for (const su of r.value.urls) {
             if (su.url) {
+              const isDirect = su.url.includes('.m3u8');
               channels.push({
-                name: `Server ${serverIndex++} (${su.quality})`,
+                name: isDirect ? `Server ${serverIndex++} (Direct HD)` : `Server ${serverIndex++} (${su.quality})`,
                 url: su.url,
                 proxiedUrl: su.url,
                 provider: this.id,
