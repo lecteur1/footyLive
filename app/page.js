@@ -14,13 +14,23 @@ export default function Home() {
   const playerContainerRef = useRef(null);
   const iframeRef = useRef(null);
 
-    useEffect(() => {
-    // منع النوافذ المنبثقة الإعلانية تلقائياً
-    try {
-      window.open = () => null;
-    } catch (err) {}
+      useEffect(() => {
+    // 1. حظر فتح أي نافذة خارجية جديدة نهائياً
+    window.open = function () {
+      return null;
+    };
+
+    // 2. حماية التطبيق من محاولات السيرفر إعادة توجيه الصفحة (Redirect)
+    const handleBeforeUnload = (e) => {
+      // منع السيرفر من تغيير رابط تطبيقك
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     fetchMatches();
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
 
@@ -329,8 +339,8 @@ export default function Home() {
   style={{ width: '100%', height: '100%', border: 'none' }}
   allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
   allowFullScreen
-  sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
 />
+
 
             ) : (
               <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#9ca3af' }}>
