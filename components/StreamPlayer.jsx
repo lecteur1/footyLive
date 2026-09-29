@@ -2,12 +2,7 @@
 
 import React from 'react';
 
-interface StreamPlayerProps {
-  streamUrl: string;
-  onClose?: () => void;
-}
-
-export default function StreamPlayer({ streamUrl, onClose }: StreamPlayerProps) {
+export default function StreamPlayer({ streamUrl, onClose }) {
   if (!streamUrl) {
     return (
       <div className="w-full aspect-video bg-neutral-900 rounded-xl flex items-center justify-center text-zinc-400">
@@ -21,13 +16,14 @@ export default function StreamPlayer({ streamUrl, onClose }: StreamPlayerProps) 
       {onClose && (
         <button
           onClick={onClose}
+          type="button"
           className="absolute top-3 right-3 z-50 bg-red-600/80 hover:bg-red-600 text-white rounded-full p-1.5 transition"
         >
           ✕
         </button>
       )}
 
-      {/* مشغل المصدر الأصلي المباشر بدون أي طبقات حماية إضافية أو أزرار قفل */}
+      {/* مشغل المصدر النقي والمباشر */}
       <iframe
         src={streamUrl}
         className="w-full h-full border-0"
