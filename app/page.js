@@ -16,6 +16,12 @@ export default function Home() {
 
   useEffect(() => {
     fetchMatches();
+
+    if (typeof window !== 'undefined') {
+      window.open = function () {
+        return null;
+      };
+    }
   }, []);
 
   const fetchMatches = async () => {
@@ -32,7 +38,6 @@ export default function Home() {
     }
   };
 
-  // تحويل التوقيت إلى التوقيت المحلي لهاتف المستخدم بصيغة 24 ساعة (مثال 21:00)
   const formatLocalTime = (timestamp, timeStr) => {
     try {
       if (timestamp) {
@@ -49,50 +54,26 @@ export default function Home() {
   };
 
   const handleWatchMatch = async (match) => {
-  import { NextResponse } from 'next/server';
+    try {
+      const res = await fetch(`/api/streams/${match.id}`);
+      const data = await res.json();
+      const availableStreams = data.streams || [];
 
-// قائمة البطولات والكلمات المفتاحية المهمة للمستخدم العربي والمحلي
-const PRIORITY_KEYWORDS = [
-  'champions league', 'premier league', 'laliga', 'serie a', 'bundesliga', 
-  'ligue 1', 'caf', 'africa', 'algeria', 'morocco', 'egypt', 'saudi', 
-  'world cup', 'euro', 'nations league', 'afcon', 'copa'
-];
+      // منع فتح المشغل والشاشة السوداء إذا لم تكن هناك سيرفرات جاهزة
+      if (!availableStreams || availableStreams.length === 0) {
+        alert('البث المباشر لهذه المباراة غير متوفر حالياً.');
+        return;
+      }
 
-export async function GET() {
-  try {
-    // 1. جلب المباريات من المصدر المعتمد
-    const res = await fetch('https://v3.football.api-sports.io/fixtures?live=all', {
-      headers: {
-        'x-apisports-key': process.env.FOOTBALL_API_KEY || '',
-        'User-Agent': 'Mozilla/5.0'
-      },
-      next: { revalidate: 60 }
-    });
-
-    // في حال كنت تعتمد على مصدر الـ Scraper المباشر الخاص بالمشروع:
-    const data = await res.json();
-    let rawMatches = data.response || data.matches || (Array.isArray(data) ? data : []);
-
-    // 2. فلترة صارمة: فقط المباريات التي تملك بثاً حقيقياً أو بطولات ذات أولوية
-    const filteredMatches = rawMatches.filter((m) => {
-      const tournament = (m.tournament || m.league?.name || '').toLowerCase();
-      const hasStreams = (m.streams && m.streams.length > 0) || m.hasStreams === true;
-
-      // استبعاد الدوريات الضعيفة جداً غير المتلفزة عربياً إلا إذا توفر لها سيرفر مؤكد
-      const isPriority = PRIORITY_KEYWORDS.some(k => tournament.includes(k));
-
-      return hasStreams || isPriority;
-    });
-
-    return NextResponse.json({
-      matches: filteredMatches.length > 0 ? filteredMatches : rawMatches.slice(0, 8)
-    });
-
-  } catch (error) {
-    return NextResponse.json({ matches: [] }, { status: 500 });
-  }
-}
-
+      setSelectedMatchTitle(match.title);
+      setIsPlayerOpen(true);
+      setStreams(availableStreams);
+      setCurrentStreamIndex(0);
+      playStreamAtIndex(0, availableStreams);
+    } catch (e) {
+      alert('تعذر جلب السيرفرات حالياً، يرجى إعادة المحاولة.');
+    }
+  };
 
   const playStreamAtIndex = (index, streamsList = streams) => {
     if (!streamsList || streamsList.length === 0 || index >= streamsList.length) {
@@ -107,12 +88,11 @@ export async function GET() {
 
     if (fallbackTimerRef.current) clearTimeout(fallbackTimerRef.current);
 
-    // إذا لم يعمل السيرفر خلال 7 ثوانٍ، ينتقل تلقائياً للتالي
     fallbackTimerRef.current = setTimeout(() => {
       if (index + 1 < streamsList.length) {
         const nextIndex = index + 1;
         const nextName = streamsList[nextIndex].name || `Server ${nextIndex + 1}`;
-        setFailoverNotice(`السيرفر بطيء، جارٍ الانتقال تلقائياً إلى ${nextName}...`);
+        setFailoverNotice(`السيرفر بطيء، الانتقال التلقائي إلى ${nextName}...`);
         playStreamAtIndex(nextIndex, streamsList);
       }
     }, 7000);
@@ -123,7 +103,7 @@ export async function GET() {
       clearTimeout(fallbackTimerRef.current);
     }
     const currentName = streams[currentStreamIndex]?.name || `Server ${currentStreamIndex + 1}`;
-    setFailoverNotice(`متصل الآن بـ: ${currentName}`);
+    setFailoverNotice(`متصل بـ: ${currentName}`);
     setTimeout(() => setFailoverNotice(''), 3000);
   };
 
@@ -152,10 +132,10 @@ export async function GET() {
       overflowX: 'hidden'
     }}>
       
-      {/* شريط العلم الجزائري العلوي */}
+      {/* شريط العلم الوطني */}
       <div style={{ height: '4px', width: '100%', background: 'linear-gradient(90deg, #00853f 33.3%, #ffffff 33.3%, #ffffff 66.6%, #d21034 66.6%)' }}></div>
 
-      {/* الهيدر العلوي */}
+      {/* الشريط العلوي */}
       <header style={{
         background: '#111a14',
         borderBottom: '1px solid #1d3324',
@@ -181,12 +161,12 @@ export async function GET() {
         </button>
       </header>
 
-      {/* قائمة المباريات */}
+      {/* قائمة المباريات المباشرة */}
       <main style={{ padding: '16px', width: '100%', boxSizing: 'border-box' }}>
         {loadingMatches ? (
           <div style={{ textAlign: 'center', padding: '50px 0', color: '#6ee7b7' }}>جارٍ جلب المباريات المباشرة...</div>
         ) : matches.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '50px 0', color: '#9ca3af' }}>لا توجد مباريات معروضة حالياً.</div>
+          <div style={{ textAlign: 'center', padding: '50px 0', color: '#9ca3af' }}>لا توجد مباريات جارية حالياً.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
             {matches.map((m) => {
@@ -211,7 +191,6 @@ export async function GET() {
                     position: 'relative'
                   }}
                 >
-                  {/* شريط حالة المباراة والبطولة */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <span style={{ fontSize: '0.75rem', background: '#09140d', color: '#34d399', padding: '4px 10px', borderRadius: '20px', border: '1px solid #1a3c26', fontWeight: 'bold' }}>
                       {m.tournament || 'مباراة كرة قدم'}
@@ -227,10 +206,7 @@ export async function GET() {
                     )}
                   </div>
 
-                  {/* تقابل الفريقين وجهاً لوجه */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: '8px', width: '100%' }}>
-                    
-                    {/* الفريق الأول */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                       <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
                         {m.homeTeam?.badge ? (
@@ -242,7 +218,6 @@ export async function GET() {
                       <span style={{ fontSize: '0.95rem', fontWeight: '800', marginTop: '8px', color: '#f3f4f6' }}>{homeName}</span>
                     </div>
 
-                    {/* منطقة المنتصف: إما النتيجة الحية أو توقيت الانطلاق المحلي */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0 8px' }}>
                       {isLive ? (
                         <>
@@ -269,7 +244,6 @@ export async function GET() {
                       )}
                     </div>
 
-                    {/* الفريق الثاني */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
                       <div style={{ width: '56px', height: '56px', borderRadius: '16px', background: '#0a140e', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #1a3c26', padding: '4px' }}>
                         {m.awayTeam?.badge ? (
@@ -282,7 +256,6 @@ export async function GET() {
                     </div>
                   </div>
 
-                  {/* زر المشاهدة المباشر */}
                   <button style={{ width: '100%', marginTop: '16px', background: 'linear-gradient(90deg, #00853f 0%, #00602e 100%)', color: '#fff', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.95rem', cursor: 'pointer' }}>
                     {isLive ? 'مشاهدة البث المباشر (تشغيل تلقائي)' : 'تفاصيل المباراة والسيرفرات'}
                   </button>
@@ -293,7 +266,7 @@ export async function GET() {
         )}
       </main>
 
-      {/* مشغل الفيديو المزود بمانع الإعلانات المنبثقة التام والتبديل التلقائي */}
+      {/* مشغل الفيديو */}
       {isPlayerOpen && (
         <div style={{
           position: 'fixed',
@@ -308,7 +281,6 @@ export async function GET() {
           width: '100vw',
           height: '100vh'
         }}>
-          {/* شريط رأس المشغل وزر الإغلاق ✕ */}
           <div style={{
             background: '#111a14',
             padding: '10px 16px',
@@ -342,14 +314,12 @@ export async function GET() {
             </button>
           </div>
 
-          {/* تنبيه حالة السيرفر والتبديل الذكي */}
           {failoverNotice && (
             <div style={{ background: '#0a2315', color: '#34d399', padding: '6px 14px', fontSize: '0.75rem', textAlign: 'center', borderBottom: '1px solid #144026' }}>
               {failoverNotice}
             </div>
           )}
 
-          {/* شريط أزرار السيرفرات السريعة */}
           {streams.length > 1 && (
             <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '8px 12px', background: '#0b120e', borderBottom: '1px solid #16241a' }}>
               {streams.map((s, idx) => (
@@ -374,7 +344,6 @@ export async function GET() {
             </div>
           )}
 
-          {/* شاشة البث المحمية تماماً من الـ Popups */}
           <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%', background: '#000' }}>
             {activeUrl ? (
               <iframe
@@ -386,7 +355,6 @@ export async function GET() {
                 allowFullScreen
                 loading="eager"
                 referrerPolicy="no-referrer"
-                sandbox="allow-scripts allow-same-origin allow-forms"
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
               />
             ) : (
