@@ -219,10 +219,10 @@ export default function Home() {
   key={currentUrl}
   src={currentUrl}
   style={{ width: '100%', height: '100%', border: 'none' }}
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  allow="autoplay; fullscreen; encrypted-media; picture-in-picture; cross-origin-isolated"
   allowFullScreen
-  referrerPolicy="no-referrer"
 />
+
 
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
