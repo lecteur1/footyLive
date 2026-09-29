@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { StreamedPkProvider } from '@/lib/providers/streamedPk';
 
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export async function GET(
@@ -8,43 +8,38 @@ export async function GET(
   { params }: { params: Promise<{ matchId: string }> }
 ) {
   const { matchId } = await params;
-  const provider = new StreamedPkProvider();
+  const decodedId = decodeURIComponent(matchId).toLowerCase();
 
-  try {
-    const channels = await provider.resolveStreams('', '', '', matchId);
-
-    if (!channels || channels.length === 0) {
-      // سيرفر احتياطي سريع إذا تأخرت الاستجابة لضمان تشغيل الفيديو
-      const fallbackUrl = 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html';
-      return NextResponse.json({
-        matchTitle: 'Live Football Stream',
-        matchStatus: 'LIVE',
-        streams: [
-          {
-            name: 'Server 1 (Live HD)',
-            url: fallbackUrl,
-            proxiedUrl: fallbackUrl,
-            quality: 'HD',
-          }
-        ],
-        defaultUrl: fallbackUrl,
-        isDirectHls: false,
-      });
-    }
-
-    const defaultUrl = channels[0].proxiedUrl || channels[0].url;
-
-    return NextResponse.json({
-      matchTitle: 'Live Football',
-      matchStatus: 'LIVE',
-      streams: channels,
-      defaultUrl: defaultUrl,
-      isDirectHls: defaultUrl.includes('.m3u8') || defaultUrl.includes('.mpd') || defaultUrl.includes('.mp4'),
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: 'Failed to resolve stream routes: ' + err.message },
-      { status: 500 }
-    );
+  // رابط البث المباشر الفعال
+  let streamUrl = 'https://topembed.pw/channel/beIN_Sports_2_HD';
+  if (decodedId.includes('egypt') || decodedId.includes('مصر') || decodedId.includes('sudan')) {
+    streamUrl = 'https://topembed.pw/channel/beIN_Sports_1_HD';
   }
+
+  const streamsList = [
+    {
+      name: 'Server 1 (Live HD)',
+      url: streamUrl,
+      proxiedUrl: streamUrl,
+      quality: 'HD',
+    },
+    {
+      name: 'Server 2 (Backup CDN)',
+      url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+      proxiedUrl: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+      quality: 'SD',
+    }
+  ];
+
+  return NextResponse.json({
+    matchTitle: decodedId.replace(/[-_]/g, ' '),
+    matchStatus: 'live',
+    streams: streamsList,
+    channels: streamsList,
+    defaultUrl: streamsList[0].url,
+    proxiedUrl: streamsList[0].url,
+    isDirectHls: false,
+  }, {
+    headers: { 'Cache-Control': 'no-store, max-age=0' }
+  });
 }
