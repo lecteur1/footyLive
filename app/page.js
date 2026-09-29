@@ -10,13 +10,42 @@ export default function Home() {
   const [currentStreamIndex, setCurrentStreamIndex] = useState(0);
   const [activeMatch, setActiveMatch] = useState(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
-  const [directHlsUrl, setDirectHlsUrl] = useState('');
 
   const playerContainerRef = useRef(null);
-  const videoRef = useRef(null);
 
   useEffect(() => {
     fetchMatches();
+
+    // حظر النوافذ المنبثقة والروابط الإعلانية داخل المتصفح وتطبيق APK
+    if (typeof window !== 'undefined') {
+      const originalOpen = window.open;
+      window.open = function (url, target, features) {
+        if (!url || typeof url !== 'string') return null;
+        
+        // قائمة النطاقات الإعلانية المكتشفة في البث
+        const blockedKeywords = [
+          'ay267',
+          'budgetezy',
+          'bonuscafe',
+          'bblaa',
+          'owlclick',
+          'aliexpress',
+          'myvccs',
+          'ppivnote',
+          'ioneal',
+          'uilts',
+          'afu.php'
+        ];
+
+        const isAd = blockedKeywords.some((domain) => url.toLowerCase().includes(domain));
+        if (isAd) {
+          console.warn('Ad popup blocked by Saifou Sat Shield:', url);
+          return null;
+        }
+
+        return originalOpen.call(window, url, target, features);
+      };
+    }
   }, []);
 
   const fetchMatches = async () => {
@@ -48,27 +77,11 @@ export default function Home() {
     return '00:00';
   };
 
-  const extractDirectStream = async (url) => {
-    if (!url) return;
-    try {
-      const extRes = await fetch(`/api/extractor?url=${encodeURIComponent(url)}`);
-      const extData = await extRes.json();
-      if (extData?.success && extData.type === 'hls' && extData.streamUrl) {
-        setDirectHlsUrl(extData.streamUrl);
-      } else {
-        setDirectHlsUrl('');
-      }
-    } catch (e) {
-      setDirectHlsUrl('');
-    }
-  };
-
   const handleOpenMatch = async (match) => {
     setActiveMatch(match);
     setIsPlayerOpen(true);
     setLoadingStream(true);
     setStreams([]);
-    setDirectHlsUrl('');
     setCurrentStreamIndex(0);
 
     try {
@@ -85,23 +98,11 @@ export default function Home() {
       }
 
       setStreams(streamList);
-
-      if (streamList[0]?.url) {
-        extractDirectStream(streamList[0].url);
-      }
     } catch (err) {
       console.error('Failed to load streams', err);
       setStreams([]);
     } finally {
       setLoadingStream(false);
-    }
-  };
-
-  const handleServerSwitch = (index) => {
-    setCurrentStreamIndex(index);
-    setDirectHlsUrl('');
-    if (streams[index]?.url) {
-      extractDirectStream(streams[index].url);
     }
   };
 
@@ -213,18 +214,7 @@ export default function Home() {
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66', fontSize: '14px' }}>
                   جاري جلب وتشغيل البث المباشر...
                 </div>
-              ) : directHlsUrl ? (
-                /* مشغل الفيديو الأصلي النظيف بدون إعلانات نهائياً */
-                <video
-                  ref={videoRef}
-                  src={directHlsUrl}
-                  controls
-                  autoPlay
-                  playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                />
               ) : currentUrl ? (
-                /* المشغل التضميني المباشر النظيف بدون sandbox لتفادي حظر المشغل */
                 <iframe
                   key={currentUrl}
                   src={currentUrl}
@@ -256,11 +246,7 @@ export default function Home() {
                 ⛶ تكبير الشاشة
               </button>
 
-              {directHlsUrl ? (
-                <span style={{ fontSize: '12px', color: '#00cc66', fontWeight: 'bold' }}>
-                  ● بث مباشر نقي (HLS)
-                </span>
-              ) : currentUrl ? (
+              {currentUrl && (
                 <a
                   href={currentUrl}
                   target="_blank"
@@ -277,7 +263,7 @@ export default function Home() {
                   <span>فتح في نافذة مستقلة</span>
                   <span>↗</span>
                 </a>
-              ) : null}
+              )}
             </div>
 
             {/* أزرار السيرفرات */}
@@ -288,7 +274,7 @@ export default function Home() {
                   {streams.map((s, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleServerSwitch(idx)}
+                      onClick={() => setCurrentStreamIndex(idx)}
                       style={{
                         flex: 1,
                         minWidth: '100px',
