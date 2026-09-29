@@ -185,12 +185,13 @@ export default function Home() {
                 </div>
               ) : currentUrl ? (
                 <iframe
-                  key={currentUrl}
-                  src={currentUrl}
-                  style={{ width: '100%', height: '100%', border: 'none' }}
-                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-                  allowFullScreen
-                />
+  key={currentUrl}
+  src={`/api/proxy?url=${encodeURIComponent(currentUrl)}`}
+  style={{ width: '100%', height: '100%', border: 'none' }}
+  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  allowFullScreen
+/>
+
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888', padding: '20px', textAlign: 'center', fontSize: '13px' }}>
                   لا يوجد بث مباشر متاح حالياً لهذه المباراة (قد تكون لم تبدأ بعد أو انتهت).
