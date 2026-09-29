@@ -14,9 +14,15 @@ export default function Home() {
   const playerContainerRef = useRef(null);
   const iframeRef = useRef(null);
 
-  useEffect(() => {
+    useEffect(() => {
+    // منع النوافذ المنبثقة الإعلانية تلقائياً
+    try {
+      window.open = () => null;
+    } catch (err) {}
+
     fetchMatches();
   }, []);
+
 
   const fetchMatches = async () => {
     setLoadingMatches(true);
