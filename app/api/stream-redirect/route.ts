@@ -33,26 +33,50 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL scheme' }, { status: 400 });
     }
 
-    // إرجاع صفحة HTML نظيفة تحمل الرابط مباشرة في هاتف المستخدم مع حظر الـ Popups
+    const targetUrl = new URL(decoded);
+    const targetOrigin = targetUrl.origin;
+
+    // صفحة عازلة تقوم بمحاكاة النطاق الأصلي لمنع manifestLoadError وحظر الإعلانات
     const html = `<!DOCTYPE html>
-<html>
+<html lang="ar">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="referrer" content="no-referrer">
+  <meta name="referrer" content="origin">
+  <base href="${targetOrigin}/">
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
     iframe { width: 100%; height: 100%; border: 0; display: block; }
   </style>
+  <script>
+    // 1. شل حركة النوافذ المنبثقة
+    window.open = function() { return null; };
+    
+    // 2. إبطال أي محاولة لإعادة توجيه الصفحة أو فتح علامات تبويب إعلانية
+    window.addEventListener('beforeunload', function(e) {
+      e.stopImmediatePropagation();
+    });
+
+    document.addEventListener('click', function(e) {
+      var a = e.target.closest('a');
+      if (a) {
+        a.removeAttribute('target');
+        if (a.href && !a.href.includes(window.location.hostname)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    }, true);
+  </script>
 </head>
 <body>
-  <iframe
-  src="${decoded}"
-  allowfullscreen="true"
-  webkitallowfullscreen="true"
-  mozallowfullscreen="true"
-  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-></iframe>
+  <iframe 
+    src="${decoded}" 
+    allowfullscreen="true" 
+    webkitallowfullscreen="true" 
+    mozallowfullscreen="true"
+    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  ></iframe>
 </body>
 </html>`;
 
@@ -60,8 +84,10 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
-        'Access-Control-Allow-Origin': '*'
-      }
+        'Access-Control-Allow-Origin': '*',
+        // ترويسة حظر تتبع الإعلانات
+        'Cross-Origin-Resource-Policy': 'cross-origin'
+      },
     });
 
   } catch (err: any) {
