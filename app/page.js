@@ -16,29 +16,35 @@ export default function Home() {
   useEffect(() => {
     fetchMatches();
 
-    // حظر محاولات التوجيه الخبيثة والإعلانات المعروفة
+    // حظر النوافذ الإعلانية المنبثقة عبر سياسة القائمة البيضاء (Allowlist)
     if (typeof window !== 'undefined') {
       const originalOpen = window.open;
+
+      // تحديد النطاقات المسموح لها فقط بفتح نوافذ جديدة
+      const allowedHosts = [
+        window.location.hostname, // موقعك
+        'embed.st',               // مزود المشغل الرئيسي
+      ];
+
       window.open = function (url, target, features) {
-        if (!url || typeof url !== 'string') return null;
+        if (!url || typeof url !== 'string') {
+          return null;
+        }
 
-        const blockedKeywords = [
-          'ay267',
-          'budgetezy',
-          'bonuscafe',
-          'bblaa',
-          'owlclick',
-          'aliexpress',
-          'myvccs',
-          'ppivnote',
-          'ioneal',
-          'uilts',
-          'afu.php'
-        ];
+        try {
+          const targetUrl = new URL(url, window.location.href);
+          const isAllowed = allowedHosts.some(
+            (allowed) =>
+              targetUrl.hostname === allowed ||
+              targetUrl.hostname.endsWith('.' + allowed)
+          );
 
-        const isAd = blockedKeywords.some((domain) => url.toLowerCase().includes(domain));
-        if (isAd) {
-          console.warn('Ad popup blocked:', url);
+          if (!isAllowed) {
+            console.warn('تم اعتراض نافذة إعلانية غير مصرح بها:', targetUrl.origin);
+            return null; // حظر فوري لأي نطاق خارجي غير مدرج في القائمة البيضاء
+          }
+        } catch (e) {
+          // إلغاء الرابط في حال كان غير صالح أو محاولة حقن غير شرعية
           return null;
         }
 
@@ -52,7 +58,11 @@ export default function Home() {
     try {
       const res = await fetch('/api/matches');
       const data = await res.json();
-      const list = Array.isArray(data) ? data : (Array.isArray(data?.matches) ? data.matches : []);
+      const list = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.matches)
+        ? data.matches
+        : [];
       setMatches(list);
     } catch (e) {
       console.error(e);
@@ -222,7 +232,8 @@ export default function Home() {
                     allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
                     allowFullScreen
                   />
-                  {/* زر تشغيل فوري لتجاوز قيود الـ WebView المسببة للرسالة الحمراء */}
+
+                  {/* زر تشغيل مباشر في المشغل الكامل */}
                   <div
                     style={{
                       position: 'absolute',
@@ -350,8 +361,14 @@ export default function Home() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {matches.map((match, idx) => {
-              const teamHome = typeof match.homeTeam === 'object' ? (match.homeTeam?.name || match.team1) : (match.team1 || match.homeTeam || 'فريق 1');
-              const teamAway = typeof match.awayTeam === 'object' ? (match.awayTeam?.name || match.team2) : (match.team2 || match.awayTeam || 'فريق 2');
+              const teamHome =
+                typeof match.homeTeam === 'object'
+                  ? match.homeTeam?.name || match.team1
+                  : match.team1 || match.homeTeam || 'فريق 1';
+              const teamAway =
+                typeof match.awayTeam === 'object'
+                  ? match.awayTeam?.name || match.team2
+                  : match.team2 || match.awayTeam || 'فريق 2';
 
               return (
                 <div
@@ -378,8 +395,14 @@ export default function Home() {
                     >
                       {match.tournament || 'مباراة مباشرة'}
                     </span>
-                    <span style={{ fontSize: '11px', color: match.status === 'live' ? '#ff4d4d' : '#888', fontWeight: match.status === 'live' ? 'bold' : 'normal' }}>
-                      {match.status === 'live' ? '● مباشر الآن' : (match.status || 'لم تبدأ بعد')}
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: match.status === 'live' ? '#ff4d4d' : '#888',
+                        fontWeight: match.status === 'live' ? 'bold' : 'normal',
+                      }}
+                    >
+                      {match.status === 'live' ? '● مباشر الآن' : match.status || 'لم تبدأ بعد'}
                     </span>
                   </div>
 
