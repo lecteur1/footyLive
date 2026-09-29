@@ -5,44 +5,68 @@ import { StreamedPkProvider } from './providers/streamedPk';
 import { getCacheManager } from './cache/cacheManager';
 
 const SECRET_KEY = process.env.STREAM_SECRET || 'default_stream_hmac_secret_key_123_abc';
-
 const streamedProvider = new StreamedPkProvider();
 
 export function getStreamRedirectUrl(originalUrl: string): string {
-  if (
-    originalUrl.includes('embed') ||
-    originalUrl.includes('player') ||
-    originalUrl.includes('.html') ||
-    originalUrl.startsWith('/')
-  ) {
-    return originalUrl;
-  }
-  const encoded = Buffer.from(originalUrl).toString('base64url');
-  const expires = Date.now() + 4 * 60 * 60 * 1000;
-  const signature = crypto
-    .createHmac('sha256', SECRET_KEY)
-    .update(`${encoded}:${expires}`)
-    .digest('hex');
-  return `/api/stream-redirect?u=${encoded}&expires=${expires}&sig=${signature}`;
+  return originalUrl;
 }
 
 export async function getMatches(): Promise<Match[]> {
   const cache = getCacheManager();
-  return cache.swr('engine_all_matches', async () => {
+  return cache.swr('engine_master_matches_all', async () => {
+    const now = Date.now();
+
+    // 1. المباريات العربية والإفريقية المباشرة لليوم
+    const customMatches: Match[] = [
+      {
+        id: 'ar-algeria-vs-burundi',
+        title: 'الجزائر ضد بوروندي',
+        team1: 'الجزائر',
+        team2: 'بوروندي',
+        homeTeam: { name: 'الجزائر', badge: '' },
+        awayTeam: { name: 'بوروندي', badge: '' },
+        tournament: 'تصفيات كأس أفريقيا',
+        status: 'live',
+        timestamp: now,
+        time: '15:00',
+        hasStreams: true,
+      } as unknown as Match,
+      {
+        id: 'ar-egypt-vs-south-sudan',
+        title: 'مصر ضد جنوب السودان',
+        team1: 'مصر',
+        team2: 'جنوب السودان',
+        homeTeam: { name: 'مصر', badge: '' },
+        awayTeam: { name: 'جنوب السودان', badge: '' },
+        tournament: 'تصفيات كأس أفريقيا',
+        status: 'live',
+        timestamp: now,
+        time: '15:00',
+        hasStreams: true,
+      } as unknown as Match,
+      {
+        id: 'ar-morocco-vs-lesotho',
+        title: 'المغرب ضد ليسوتو',
+        team1: 'المغرب',
+        team2: 'ليسوتو',
+        homeTeam: { name: 'المغرب', badge: '' },
+        awayTeam: { name: 'ليسوتو', badge: '' },
+        tournament: 'تصفيات كأس أفريقيا',
+        status: 'live',
+        timestamp: now,
+        time: '15:00',
+        hasStreams: true,
+      } as unknown as Match,
+    ];
+
+    // 2. جلب المباريات العالمية الإضافية من StreamedPk
     try {
-      const matches = await streamedProvider.fetchMatches();
-      return matches.sort((a, b) => {
-        const aLive = a.status === 'live';
-        const bLive = b.status === 'live';
-        if (aLive && !bLive) return -1;
-        if (!aLive && bLive) return 1;
-        return (a.timestamp || 0) - (b.timestamp || 0);
-      });
-    } catch (err) {
-      logger.error('Failed to get matches in streamEngine', err);
-      return [];
+      const globalMatches = await streamedProvider.fetchMatches();
+      return [...customMatches, ...globalMatches];
+    } catch {
+      return customMatches;
     }
-  }, 15);
+  }, 10);
 }
 
 export async function getLiveMatches(): Promise<Match[]> {
@@ -60,61 +84,55 @@ export async function resolveAllStreams(
   matchId: string,
   homeTeam: string,
   awayTeam: string,
-  preFetchedMatch?: Match | null
+  preFetchedMatch?: any
 ): Promise<{ url: string; proxiedUrl: string; channels: Channel[]; serverCount: number }> {
-  const cache = getCacheManager();
-  const cacheKey = `streams_${matchId}`;
+  const mLower = `${matchTitle} ${matchId}`.toLowerCase();
 
-  return cache.swr(cacheKey, async () => {
-    let channels = await streamedProvider.resolveStreams(
-      matchTitle,
-      homeTeam,
-      awayTeam,
-      matchId,
-      preFetchedMatch
-    );
+  let s1 = 'https://topembed.pw/channel/beIN_Sports_2_HD';
+  let s2 = 'https://embedstream.me/bein-sports-2-stream-1';
 
-    // توفير سيرفر احتياطي سريع في حال تأخر المصدر الخارجي لضمان عدم توقف المشغل
-    if (!channels || channels.length === 0) {
-      channels = [
-        {
-          name: 'Server 1 (Global Live)',
-          url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
-          provider: 'streamed',
-          quality: 'HD',
-        },
-      ];
+  if (mLower.includes('egypt') || mLower.includes('مصر') || mLower.includes('sudan')) {
+    s1 = 'https://topembed.pw/channel/beIN_Sports_1_HD';
+    s2 = 'https://embedstream.me/bein-sports-1-stream-1';
+  } else if (mLower.includes('england') || mLower.includes('czechia') || mLower.includes('spain')) {
+    s1 = 'https://embedstream.me/bein-sports-1-stream-1';
+    s2 = 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html';
+  }
+
+  const channels: Channel[] = [
+    {
+      name: 'Server 1 (Live HD)',
+      url: s1,
+      proxiedUrl: s1,
+      quality: 'HD',
+      provider: 'bein',
+    },
+    {
+      name: 'Server 2 (Fast Stream)',
+      url: s2,
+      proxiedUrl: s2,
+      quality: '720p',
+      provider: 'bein',
+    },
+    {
+      name: 'Server 3 (Backup CDN)',
+      url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+      proxiedUrl: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+      quality: 'SD',
+      provider: 'direct',
     }
+  ];
 
-    const uniqueServers: Channel[] = [];
-    const seenUrls = new Set<string>();
-    let serverIndex = 1;
-
-    for (const server of channels) {
-      if (server.url && !seenUrls.has(server.url)) {
-        seenUrls.add(server.url);
-        uniqueServers.push({
-          ...server,
-          name: server.name || `Server ${serverIndex++}`,
-          proxiedUrl: server.url,
-        });
-      }
-    }
-
-    const primaryUrl = uniqueServers[0]?.url || '';
-
-    return {
-      url: primaryUrl,
-      proxiedUrl: primaryUrl,
-      channels: uniqueServers,
-      serverCount: uniqueServers.length,
-    };
-  }, 20);
+  return {
+    url: channels[0].url,
+    proxiedUrl: channels[0].url,
+    channels,
+    serverCount: channels.length,
+  };
 }
 
-// توفير الدوال التكميلية التي تستدعيها واجهات الإحصائيات في المشروع
 export async function getLeagues(): Promise<string[]> {
-  return ['World Football', 'UEFA', 'International'];
+  return ['World Football', 'International'];
 }
 
 export async function getTopTeams(): Promise<string[]> {
