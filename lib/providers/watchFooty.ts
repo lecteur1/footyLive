@@ -8,6 +8,32 @@ const WATCHFOOTY_API = process.env.NEXT_PUBLIC_API_BASE || 'https://api.watchfoo
 const TIMEOUT_MS = 4000;
 const SHORT_TIMEOUT = 2500;
 
+// البطولات والدوريات الرسمية المعتمدة فقط (نفس أسلوب التطبيقات العالمية)
+const ALLOWED_LEAGUES = [
+  'africa cup',
+  'afcon',
+  'caf',
+  'uefa',
+  'champions league',
+  'europa',
+  'conference league',
+  'nations league',
+  'premier league',
+  'la liga',
+  'serie a',
+  'bundesliga',
+  'ligue 1',
+  'world cup',
+  'euro',
+  'copa america',
+  'asian cup',
+  'afc champions',
+  'international friendly',
+  'pro league', // دوري روشن
+  'fa cup',
+  'carabao'
+];
+
 export class WatchFootyProvider implements StreamProvider {
   id = 'watchfooty';
   name = 'WatchFooty';
@@ -35,7 +61,18 @@ export class WatchFootyProvider implements StreamProvider {
 
   async fetchMatches(): Promise<Match[]> {
     const raw = await this.fetchRawMatches();
-    return raw.map(normalizeWatchFootyMatch);
+    const normalized = raw.map(normalizeWatchFootyMatch);
+
+    // فلترة المباريات: استبعاد البطولات الضعيفة أو التي لا تملك روابط وسيرفرات
+    return normalized.filter((m: Match) => {
+      if (!m.title) return false;
+      const tournament = (m.tournament || '').toLowerCase();
+      const isTopLeague = ALLOWED_LEAGUES.some(l => tournament.includes(l));
+      
+      // إذا كانت المباراة جارية، يجب أن تحتوي على مصادر بث مسبقة
+      const hasStreams = Array.isArray(m.sources) && m.sources.length > 0;
+      return isTopLeague && (m.status !== 'live' || hasStreams);
+    });
   }
 
   async resolveStreams(
@@ -52,7 +89,7 @@ export class WatchFootyProvider implements StreamProvider {
       name: `Server ${idx + 1}`,
       url: s.url,
       provider: this.id,
-      quality: s.quality ? String(s.quality).toUpperCase() : 'SD',
+      quality: s.quality ? String(s.quality).toUpperCase() : 'HD',
     }));
   }
 }
@@ -67,7 +104,6 @@ export function normalizeWatchFootyMatch(match: any): Match {
   const kickoffTime = match.timestamp ? new Date(match.timestamp).getTime() : 0;
   const now = Date.now();
   const diffMinutes = kickoffTime ? Math.floor((now - kickoffTime) / 60000) : -1;
-  // A match is dynamically live if the kickoff time has arrived/passed, and it's less than 125 minutes since kickoff
   const isTimeLive = kickoffTime && diffMinutes >= 0 && diffMinutes < 125;
 
   const isExplicitlyLive = match.status === 'in' || match.status === 'live';
@@ -128,10 +164,10 @@ export function normalizeWatchFootyMatch(match: any): Match {
       id: String(s.id),
       url: s.url,
       label: `Server ${idx + 1}`,
-      quality: s.quality ? String(s.quality).toUpperCase() : 'SD'
+      quality: s.quality ? String(s.quality).toUpperCase() : 'HD'
     })),
     fallbackChannels: streams.map((s: any, idx: number) => ({
-      name: `Server ${idx + 1} (WatchFooty)`,
+      name: `Server ${idx + 1}`,
       url: s.url,
     })),
     currentMinute,
@@ -139,7 +175,6 @@ export function normalizeWatchFootyMatch(match: any): Match {
     homeScore: Math.max(0, match.scores?.home ?? match.homeScore ?? 0),
     awayScore: Math.max(0, match.scores?.away ?? match.awayScore ?? 0),
   };
-
 }
 
 export async function getLeagues(): Promise<string[]> {
