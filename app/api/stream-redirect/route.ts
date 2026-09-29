@@ -33,46 +33,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid URL scheme' }, { status: 400 });
     }
 
-    const targetUrl = new URL(decoded);
-    const targetOrigin = targetUrl.origin;
-
     const html = `<!DOCTYPE html>
-<html lang="ar">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- إرسال الـ Referer الأصلي للمشغل لتفادي manifestLoadError -->
-  <meta name="referrer" content="always">
-  <base href="${targetOrigin}/">
-  <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
-    iframe { width: 100%; height: 100%; border: 0; display: block; }
-  </style>
-  <script>
-    // حظر النوافذ الإعلانية المنبثقة
-    window.open = function() { return null; };
-    Object.defineProperty(window, 'open', { value: function() { return null; }, writable: false });
-
-    // تفريغ أي نقرات على روابط target="_blank"
-    document.addEventListener('click', function(e) {
-      var a = e.target.closest('a');
-      if (a && a.target === '_blank') {
-        a.removeAttribute('target');
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    }, true);
-  </script>
-</head>
-<body>
-  <iframe 
-    src="${decoded}" 
-    allowfullscreen="true" 
-    webkitallowfullscreen="true" 
-    mozallowfullscreen="true"
-    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-  ></iframe>
-</body>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+      iframe { width: 100%; height: 100%; border: 0; display: block; }
+    </style>
+  </head>
+  <body>
+    <iframe 
+      src="${decoded}" 
+      allowfullscreen="true" 
+      webkitallowfullscreen="true" 
+      mozallowfullscreen="true"
+      allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+    ></iframe>
+  </body>
 </html>`;
 
     return new NextResponse(html, {
@@ -80,12 +60,9 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
-        // ترويسة تسمح للـ CDN بتحميل مقاطع HLS دون رفض cross-origin
-        'Cross-Origin-Resource-Policy': 'cross-origin'
       },
     });
-
   } catch (err: any) {
-    return NextResponse.json({ error: 'Invalid stream request' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid encoding' }, { status: 400 });
   }
 }
