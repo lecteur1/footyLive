@@ -46,7 +46,6 @@ export default function Home() {
     return '00:00';
   };
 
-  // جلب السيرفرات للمباراة المحددة مباشرة
   const handleOpenMatch = async (match) => {
     setActiveMatch(match);
     setIsPlayerOpen(true);
@@ -67,20 +66,21 @@ export default function Home() {
         streamList = [{ name: 'Server 1 (Live HD)', url: data.defaultUrl || data.url }];
       }
 
-      // روابط احتياطية فورية في حال عدم توفر رد خارجي
+      // روابط مشغلات تضمين مفتوحة لا تفرض قيود X-Frame-Options
       if (streamList.length === 0) {
-        const title = (match.title || `${match.team1} ${match.team2}`).toLowerCase();
-        let targetUrl = 'https://embedstream.me/bein-sports-1-stream-1';
-
-        if (title.includes('الجزائر') || title.includes('algeria') || title.includes('burundi') || title.includes('بوروندي')) {
-          targetUrl = 'https://topembed.pw/channel/beIN_Sports_2_HD';
-        } else if (title.includes('مصر') || title.includes('egypt') || title.includes('السودان')) {
-          targetUrl = 'https://topembed.pw/channel/beIN_Sports_1_HD';
-        }
-
         streamList = [
-          { name: 'Server 1 (Live HD)', url: targetUrl },
-          { name: 'Server 2 (Backup Web)', url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html' }
+          {
+            name: 'Server 1 (Global Live)',
+            url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+          },
+          {
+            name: 'Server 2 (Fast Stream)',
+            url: 'https://embedme.top/embed/alpha/sports/1',
+          },
+          {
+            name: 'Server 3 (Backup CDN)',
+            url: 'https://crackstream.io/embed/football-1',
+          },
         ];
       }
 
@@ -88,7 +88,10 @@ export default function Home() {
     } catch (err) {
       console.error(err);
       setStreams([
-        { name: 'Server 1 (Live)', url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html' }
+        {
+          name: 'Server 1 (Global Live)',
+          url: 'https://voodc.com/embed/858a9289a089988b87948885978a878484.html',
+        },
       ]);
     } finally {
       setLoadingStream(false);
@@ -103,6 +106,8 @@ export default function Home() {
       document.exitFullscreen().catch((err) => console.error(err));
     }
   };
+
+  const currentUrl = streams[currentStreamIndex]?.url || '';
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#090e0b', color: '#ffffff', fontFamily: 'sans-serif' }}>
@@ -153,7 +158,7 @@ export default function Home() {
       {/* Main Container */}
       <div style={{ maxWidth: '650px', margin: '0 auto', padding: '16px' }}>
 
-        {/* Video Player المباشر والنظيف */}
+        {/* Video Player */}
         {isPlayerOpen && (
           <div
             style={{
@@ -201,13 +206,13 @@ export default function Home() {
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#00cc66' }}>
                   جاري جلب وتشغيل البث المباشر...
                 </div>
-              ) : streams.length > 0 && streams[currentStreamIndex]?.url ? (
+              ) : currentUrl ? (
                 <iframe
-                  src={streams[currentStreamIndex].url}
+                  key={currentUrl}
+                  src={currentUrl}
                   style={{ width: '100%', height: '100%', border: 'none' }}
-                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                  allow="autoplay; fullscreen; encrypted-media; picture-in-picture; screen-wake-lock"
                   allowFullScreen
-                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
@@ -231,9 +236,25 @@ export default function Home() {
               >
                 ⛶ تكبير الشاشة
               </button>
-              <div style={{ fontSize: '12px', color: '#00cc66' }}>
-                ● البث مباشر
-              </div>
+
+              {currentUrl && (
+                <a
+                  href={currentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: '12px',
+                    color: '#00cc66',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>فتح في نافذة مستقلة</span>
+                  <span>↗</span>
+                </a>
+              )}
             </div>
 
             {/* أزرار السيرفرات */}
