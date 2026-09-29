@@ -226,22 +226,16 @@ export default function Home() {
               ) : currentUrl ? (
                 <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                   <iframe
-                    key={currentUrl}
-                    src={currentUrl}
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-                    allowFullScreen
-                  />
+  key={currentUrl}
+  src={currentUrl}
+  style={{ width: '100%', height: '100%', border: 'none' }}
+  sandbox="allow-scripts allow-same-origin allow-forms"
+  allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  allowFullScreen
+/>
 
-                  {/* زر تشغيل مباشر في المشغل الكامل */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '10px',
-                      right: '10px',
-                      zIndex: 20,
-                    }}
-                  >
+
+                  
                     <a
                       href={currentUrl}
                       target="_blank"
