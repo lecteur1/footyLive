@@ -36,35 +36,30 @@ export async function GET(request: NextRequest) {
     const targetUrl = new URL(decoded);
     const targetOrigin = targetUrl.origin;
 
-    // صفحة عازلة تقوم بمحاكاة النطاق الأصلي لمنع manifestLoadError وحظر الإعلانات
     const html = `<!DOCTYPE html>
 <html lang="ar">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="referrer" content="origin">
+  <!-- إرسال الـ Referer الأصلي للمشغل لتفادي manifestLoadError -->
+  <meta name="referrer" content="always">
   <base href="${targetOrigin}/">
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
     iframe { width: 100%; height: 100%; border: 0; display: block; }
   </style>
   <script>
-    // 1. شل حركة النوافذ المنبثقة
+    // حظر النوافذ الإعلانية المنبثقة
     window.open = function() { return null; };
-    
-    // 2. إبطال أي محاولة لإعادة توجيه الصفحة أو فتح علامات تبويب إعلانية
-    window.addEventListener('beforeunload', function(e) {
-      e.stopImmediatePropagation();
-    });
+    Object.defineProperty(window, 'open', { value: function() { return null; }, writable: false });
 
+    // تفريغ أي نقرات على روابط target="_blank"
     document.addEventListener('click', function(e) {
       var a = e.target.closest('a');
-      if (a) {
+      if (a && a.target === '_blank') {
         a.removeAttribute('target');
-        if (a.href && !a.href.includes(window.location.hostname)) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
+        e.preventDefault();
+        e.stopPropagation();
       }
     }, true);
   </script>
@@ -85,7 +80,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Access-Control-Allow-Origin': '*',
-        // ترويسة حظر تتبع الإعلانات
+        // ترويسة تسمح للـ CDN بتحميل مقاطع HLS دون رفض cross-origin
         'Cross-Origin-Resource-Policy': 'cross-origin'
       },
     });
